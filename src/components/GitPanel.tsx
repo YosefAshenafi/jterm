@@ -153,6 +153,11 @@ export function GitPanel() {
   const staged = (status?.files ?? []).filter((f) => f.x !== " " && f.x !== "?");
   const changes = (status?.files ?? []).filter((f) => f.y !== " ");
   const canCommit = staged.length > 0 && message.trim().length > 0 && !busy;
+  // With a clean tree there's nothing left to commit, so the big button becomes
+  // Push — the one action that still makes sense. No upstream counts as
+  // pushable (publishing the branch); already-pushed disables it.
+  const treeClean = status != null && status.files.length === 0;
+  const canPush = !busy && status != null && (status.ahead > 0 || !status.upstream);
 
   return (
     <div className="panel">
@@ -206,7 +211,7 @@ export function GitPanel() {
                 className="git-message"
                 value={message}
                 spellCheck={false}
-                placeholder={`Message (commit ${staged.length} staged)`}
+                placeholder={staged.length > 0 ? `Message (commit ${staged.length} staged)` : "Message"}
                 aria-label="Commit message"
                 rows={2}
                 onChange={(e) => setMessage(e.target.value)}
@@ -216,14 +221,33 @@ export function GitPanel() {
                   e.stopPropagation();
                 }}
               />
-              <button
-                className="btn btn-primary git-commit-btn"
-                disabled={!canCommit}
-                onPointerDown={preserveFocus}
-                onClick={commit}
-              >
-                <CheckIcon /> Commit
-              </button>
+              {treeClean ? (
+                <button
+                  className="btn btn-primary git-commit-btn"
+                  title={
+                    !canPush && !busy
+                      ? "Nothing to push"
+                      : status.upstream
+                        ? `Push to ${status.upstream}`
+                        : "Push"
+                  }
+                  disabled={!canPush}
+                  onPointerDown={preserveFocus}
+                  onClick={push}
+                >
+                  <ArrowUpIcon /> Push
+                  {status.ahead > 0 ? ` (${status.ahead})` : ""}
+                </button>
+              ) : (
+                <button
+                  className="btn btn-primary git-commit-btn"
+                  disabled={!canCommit}
+                  onPointerDown={preserveFocus}
+                  onClick={commit}
+                >
+                  <CheckIcon /> Commit
+                </button>
+              )}
             </div>
 
             {error ? <div className="git-error">⚠ {error}</div> : null}

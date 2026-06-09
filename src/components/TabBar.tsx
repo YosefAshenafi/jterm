@@ -27,7 +27,7 @@ export function TabBar() {
   const cancel = () => setEditingId(null);
 
   return (
-    <div className="tabbar" data-tauri-drag-region>
+    <div className="tabbar">
       <div className="tabs" role="tablist">
         {state.tabs.map((tab) => (
           <div
