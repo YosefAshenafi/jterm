@@ -27,7 +27,7 @@ export type EditorAction =
   | { type: "open"; path: string; name: string }
   | { type: "loaded"; path: string; text: string }
   | { type: "edit"; path: string; draft: string }
-  | { type: "saved"; path: string }
+  | { type: "saved"; path: string; text: string }
   | { type: "error"; path: string; error: string }
   | { type: "select"; path: string }
   | { type: "close"; path: string };
@@ -70,11 +70,11 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       });
     case "edit":
       return patch(state, action.path, { draft: action.draft, error: null });
-    case "saved": {
-      const f = state.files.find((x) => x.path === action.path);
-      if (!f) return state;
-      return patch(state, action.path, { saved: f.draft, error: null });
-    }
+    case "saved":
+      // `text` is the content that was actually written, captured before the
+      // write. Stamping the *current* draft instead would mark keystrokes typed
+      // during the in-flight save as saved when they never reached disk.
+      return patch(state, action.path, { saved: action.text, error: null });
     case "error":
       return patch(state, action.path, { loading: false, error: action.error });
     case "select":

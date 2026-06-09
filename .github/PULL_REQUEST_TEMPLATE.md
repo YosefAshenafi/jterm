@@ -20,5 +20,5 @@ Closes #
 ## Notes
 
 - [ ] Added a `CHANGELOG.md` entry under **Unreleased** (if user-facing)
-- [ ] Kept the architecture invariants (terminals outside React, pure tree ops) —
+- [ ] Kept the architecture invariants (terminals outside React, pure tree ops);
       see CONTRIBUTING

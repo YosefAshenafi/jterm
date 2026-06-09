@@ -15,27 +15,41 @@ struct DirEntryInfo {
     is_dir: bool,
 }
 
+/// Run a blocking closure off the async runtime, surfacing panics as errors.
+/// Filesystem and subprocess commands go through this so a slow disk, a big
+/// repo, or a network mount can never freeze the UI thread.
+async fn blocking<T: Send + 'static>(
+    f: impl FnOnce() -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// List a directory, folders first then files, alphabetically.
 #[tauri::command]
-fn read_dir(path: String) -> Result<Vec<DirEntryInfo>, String> {
-    let mut out = Vec::new();
-    for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        let p = entry.path();
-        // Follow symlinks so linked directories show as folders.
-        let is_dir = std::fs::metadata(&p).map(|m| m.is_dir()).unwrap_or(false);
-        out.push(DirEntryInfo {
-            name: entry.file_name().to_string_lossy().into_owned(),
-            path: p.to_string_lossy().into_owned(),
-            is_dir,
+async fn read_dir(path: String) -> Result<Vec<DirEntryInfo>, String> {
+    blocking(move || {
+        let mut out = Vec::new();
+        for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let p = entry.path();
+            // Follow symlinks so linked directories show as folders.
+            let is_dir = std::fs::metadata(&p).map(|m| m.is_dir()).unwrap_or(false);
+            out.push(DirEntryInfo {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                path: p.to_string_lossy().into_owned(),
+                is_dir,
+            });
+        }
+        out.sort_by(|a, b| {
+            b.is_dir
+                .cmp(&a.is_dir)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         });
-    }
-    out.sort_by(|a, b| {
-        b.is_dir
-            .cmp(&a.is_dir)
-            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-    });
-    Ok(out)
+        Ok(out)
+    })
+    .await
 }
 
 /// Largest file the in-app editor will open. Bigger files are refused rather
@@ -43,36 +57,69 @@ fn read_dir(path: String) -> Result<Vec<DirEntryInfo>, String> {
 const MAX_EDIT_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Read a text file for the editor. Refuses directories, binary files (a NUL in
-/// the first 8 KiB), and files larger than `MAX_EDIT_BYTES`.
+/// the first 8 KiB), files larger than `MAX_EDIT_BYTES`, and non-UTF-8 text —
+/// lossy-decoding a Latin-1 or Shift-JIS file and saving it back would silently
+/// replace every unmapped byte with U+FFFD.
 #[tauri::command]
-fn read_file(path: String) -> Result<String, String> {
-    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
-    if meta.is_dir() {
-        return Err("Cannot open a directory".into());
-    }
-    if meta.len() > MAX_EDIT_BYTES {
-        return Err(format!(
-            "File is too large to open ({:.1} MB)",
-            meta.len() as f64 / (1024.0 * 1024.0)
-        ));
-    }
-    let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
-    if bytes[..bytes.len().min(8192)].contains(&0) {
-        return Err("Binary file — open it in the terminal instead".into());
-    }
-    Ok(String::from_utf8_lossy(&bytes).into_owned())
+async fn read_file(path: String) -> Result<String, String> {
+    blocking(move || {
+        let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+        if meta.is_dir() {
+            return Err("Cannot open a directory".into());
+        }
+        if meta.len() > MAX_EDIT_BYTES {
+            return Err(format!(
+                "File is too large to open ({:.1} MB)",
+                meta.len() as f64 / (1024.0 * 1024.0)
+            ));
+        }
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        if bytes[..bytes.len().min(8192)].contains(&0) {
+            return Err("Binary file — open it in the terminal instead".into());
+        }
+        String::from_utf8(bytes)
+            .map_err(|_| "File is not valid UTF-8 — open it in the terminal instead".into())
+    })
+    .await
 }
 
-/// Write editor contents back to disk, overwriting the file.
+/// Write editor contents back to disk atomically: write to a temp file in the
+/// same directory, fsync, then rename over the target. A crash or full disk
+/// mid-save leaves the original intact instead of a truncated file.
 #[tauri::command]
-fn write_file(path: String, content: String) -> Result<(), String> {
-    std::fs::write(&path, content).map_err(|e| e.to_string())
+async fn write_file(path: String, content: String) -> Result<(), String> {
+    blocking(move || {
+        use std::io::Write as _;
+        let target = std::path::Path::new(&path);
+        let dir = target
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .ok_or("Invalid path")?;
+        let name = target.file_name().ok_or("Invalid path")?.to_string_lossy();
+        let tmp = dir.join(format!(".{name}.jterm-save"));
+        let result = (|| {
+            let mut f = std::fs::File::create(&tmp).map_err(|e| e.to_string())?;
+            f.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
+            f.sync_all().map_err(|e| e.to_string())?;
+            std::fs::rename(&tmp, target).map_err(|e| e.to_string())
+        })();
+        if result.is_err() {
+            let _ = std::fs::remove_file(&tmp);
+        }
+        result
+    })
+    .await
 }
 
 /// Current working directory of a pane's shell (for the project toolbar/sidebar).
 #[tauri::command]
-fn pane_cwd(state: State<PtyManager>, id: u32) -> Option<String> {
-    state.cwd(id)
+async fn pane_cwd(state: State<'_, PtyManager>, id: u32) -> Result<Option<String>, String> {
+    match state.pid(id) {
+        Some(pid) => tauri::async_runtime::spawn_blocking(move || pty::process_cwd(pid))
+            .await
+            .map_err(|e| e.to_string()),
+        None => Ok(None),
+    }
 }
 
 // ---- Full-text search -------------------------------------------------------
@@ -80,8 +127,17 @@ fn pane_cwd(state: State<PtyManager>, id: u32) -> Option<String> {
 /// Non-hidden directories never descended into during a workspace search.
 /// (Hidden dirs — names starting with `.` — are skipped separately.)
 const SKIP_DIRS: &[&str] = &[
-    "node_modules", "target", "dist", "build", "vendor", "venv", "__pycache__",
-    "coverage", "out", "bin", "obj",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    "vendor",
+    "venv",
+    "__pycache__",
+    "coverage",
+    "out",
+    "bin",
+    "obj",
 ];
 const SEARCH_MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const SEARCH_MAX_RESULTS: usize = 1000;
@@ -173,7 +229,10 @@ fn search_file(
         } else {
             line.to_string()
         };
-        matches.push(SearchMatch { line: (lineno + 1) as u32, text: snippet });
+        matches.push(SearchMatch {
+            line: (lineno + 1) as u32,
+            text: snippet,
+        });
         if matches.len() >= SEARCH_MAX_PER_FILE {
             break;
         }
@@ -184,13 +243,11 @@ fn search_file(
 /// Run the (blocking) recursive search, bailing as soon as a newer search has
 /// superseded `my_gen`. Enumerates candidate files (skipping hidden + build/
 /// vendor dirs), then scans their contents across all cores.
-fn search_blocking(
-    path: &str,
-    needle: &str,
-    generation: &AtomicU64,
-    my_gen: u64,
-) -> SearchResults {
-    let empty = || SearchResults { results: vec![], truncated: false };
+fn search_blocking(path: &str, needle: &str, generation: &AtomicU64, my_gen: u64) -> SearchResults {
+    let empty = || SearchResults {
+        results: vec![],
+        truncated: false,
+    };
     let superseded = || generation.load(Ordering::Relaxed) != my_gen;
     let root = std::path::PathBuf::from(path);
 
@@ -209,7 +266,7 @@ fn search_blocking(
         };
         for entry in rd.filter_map(|e| e.ok()) {
             checked += 1;
-            if checked % 512 == 0 && superseded() {
+            if checked.is_multiple_of(512) && superseded() {
                 return empty();
             }
             let name = entry.file_name();
@@ -266,7 +323,11 @@ fn search_blocking(
                     .unwrap_or(p)
                     .to_string_lossy()
                     .into_owned();
-                let result = FileResult { path: p.to_string_lossy().into_owned(), rel, matches };
+                let result = FileResult {
+                    path: p.to_string_lossy().into_owned(),
+                    rel,
+                    matches,
+                };
                 out.lock().unwrap().push(result);
                 total.fetch_add(added, Ordering::Relaxed);
             });
@@ -278,7 +339,7 @@ fn search_blocking(
     }
     let mut results = out.into_inner().unwrap();
     let truncated = total.load(Ordering::Relaxed) >= SEARCH_MAX_RESULTS;
-    results.sort_by(|a, b| a.rel.to_lowercase().cmp(&b.rel.to_lowercase()));
+    results.sort_by_key(|a| a.rel.to_lowercase());
     SearchResults { results, truncated }
 }
 
@@ -293,13 +354,18 @@ async fn search_in_folder(
 ) -> Result<SearchResults, String> {
     let needle = query.trim().to_lowercase();
     if needle.is_empty() {
-        return Ok(SearchResults { results: vec![], truncated: false });
+        return Ok(SearchResults {
+            results: vec![],
+            truncated: false,
+        });
     }
     let generation = state.generation.clone();
     let my_gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
-    tauri::async_runtime::spawn_blocking(move || search_blocking(&path, &needle, &generation, my_gen))
-        .await
-        .map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        search_blocking(&path, &needle, &generation, my_gen)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // ---- Git --------------------------------------------------------------------
@@ -357,29 +423,9 @@ fn extract_count(s: &str, key: &str) -> u32 {
     }
 }
 
-/// Porcelain status + branch/ahead/behind for the Source Control panel.
-#[tauri::command]
-fn git_status(path: String) -> Result<GitStatus, String> {
-    let inside = std::process::Command::new("git")
-        .current_dir(&path)
-        .args(["rev-parse", "--is-inside-work-tree"])
-        .output();
-    let is_repo = matches!(&inside, Ok(o) if o.status.success()
-        && String::from_utf8_lossy(&o.stdout).trim() == "true");
-    if !is_repo {
-        return Ok(GitStatus {
-            is_repo: false,
-            root: String::new(),
-            branch: String::new(),
-            upstream: None,
-            ahead: 0,
-            behind: 0,
-            files: vec![],
-        });
-    }
-
-    let root = run_git(&path, &["rev-parse", "--show-toplevel"])?.trim().to_string();
-    let raw = run_git(&path, &["status", "--porcelain=v1", "--branch", "-uall", "-z"])?;
+/// Parse `git status --porcelain=v1 --branch -z` output into branch info and
+/// per-file status records. Pure so it can be unit-tested without a repo.
+fn parse_porcelain_status(raw: &str) -> (String, Option<String>, u32, u32, Vec<GitFile>) {
     let parts: Vec<&str> = raw.split('\0').collect();
     let mut branch = String::new();
     let mut upstream = None;
@@ -418,8 +464,14 @@ fn git_status(path: String) -> Result<GitStatus, String> {
             let x = &rec[0..1];
             let y = &rec[1..2];
             let p = &rec[3..];
-            let is_rename = x == "R" || x == "C";
-            files.push(GitFile { path: p.to_string(), x: x.to_string(), y: y.to_string() });
+            // A rename/copy in either column is followed by an extra
+            // NUL-terminated record holding the origin path.
+            let is_rename = x == "R" || x == "C" || y == "R" || y == "C";
+            files.push(GitFile {
+                path: p.to_string(),
+                x: x.to_string(),
+                y: y.to_string(),
+            });
             if is_rename {
                 i += 1; // skip the rename source path that follows
             }
@@ -427,46 +479,89 @@ fn git_status(path: String) -> Result<GitStatus, String> {
         i += 1;
     }
 
-    Ok(GitStatus { is_repo: true, root, branch, upstream, ahead, behind, files })
+    (branch, upstream, ahead, behind, files)
+}
+
+/// Porcelain status + branch/ahead/behind for the Source Control panel.
+#[tauri::command]
+async fn git_status(path: String) -> Result<GitStatus, String> {
+    blocking(move || {
+        let inside = std::process::Command::new("git")
+            .current_dir(&path)
+            .args(["rev-parse", "--is-inside-work-tree"])
+            .output();
+        let is_repo = matches!(&inside, Ok(o) if o.status.success()
+            && String::from_utf8_lossy(&o.stdout).trim() == "true");
+        if !is_repo {
+            return Ok(GitStatus {
+                is_repo: false,
+                root: String::new(),
+                branch: String::new(),
+                upstream: None,
+                ahead: 0,
+                behind: 0,
+                files: vec![],
+            });
+        }
+
+        let root = run_git(&path, &["rev-parse", "--show-toplevel"])?
+            .trim()
+            .to_string();
+        let raw = run_git(
+            &path,
+            &["status", "--porcelain=v1", "--branch", "-uall", "-z"],
+        )?;
+        let (branch, upstream, ahead, behind, files) = parse_porcelain_status(&raw);
+        Ok(GitStatus {
+            is_repo: true,
+            root,
+            branch,
+            upstream,
+            ahead,
+            behind,
+            files,
+        })
+    })
+    .await
 }
 
 #[tauri::command]
-fn git_stage(path: String, file: String) -> Result<(), String> {
-    run_git(&path, &["add", "--", &file]).map(|_| ())
+async fn git_stage(path: String, file: String) -> Result<(), String> {
+    blocking(move || run_git(&path, &["add", "--", &file]).map(|_| ())).await
 }
 
 #[tauri::command]
-fn git_stage_all(path: String) -> Result<(), String> {
-    run_git(&path, &["add", "-A"]).map(|_| ())
+async fn git_stage_all(path: String) -> Result<(), String> {
+    blocking(move || run_git(&path, &["add", "-A"]).map(|_| ())).await
 }
 
 #[tauri::command]
-fn git_unstage(path: String, file: String) -> Result<(), String> {
-    run_git(&path, &["reset", "-q", "HEAD", "--", &file]).map(|_| ())
+async fn git_unstage(path: String, file: String) -> Result<(), String> {
+    blocking(move || run_git(&path, &["reset", "-q", "HEAD", "--", &file]).map(|_| ())).await
 }
 
 #[tauri::command]
-fn git_commit(path: String, message: String) -> Result<String, String> {
+async fn git_commit(path: String, message: String) -> Result<String, String> {
     if message.trim().is_empty() {
         return Err("Commit message is empty".into());
     }
-    run_git(&path, &["commit", "-m", &message])
+    blocking(move || run_git(&path, &["commit", "-m", &message])).await
 }
 
 #[tauri::command]
-fn git_push(path: String) -> Result<String, String> {
-    run_git(&path, &["push"])
+async fn git_push(path: String) -> Result<String, String> {
+    blocking(move || run_git(&path, &["push"])).await
 }
 
 #[tauri::command]
-fn git_init(path: String) -> Result<String, String> {
-    run_git(&path, &["init"])
+async fn git_init(path: String) -> Result<String, String> {
+    blocking(move || run_git(&path, &["init"])).await
 }
 
 /// Spawn a shell in a new PTY; returns the pty id used by the other commands.
 #[tauri::command]
-fn pty_spawn(
-    state: State<PtyManager>,
+async fn pty_spawn(
+    state: State<'_, PtyManager>,
     cwd: Option<String>,
     shell: Option<String>,
     cols: u16,
@@ -476,21 +571,35 @@ fn pty_spawn(
     state.spawn(cwd, shell, cols, rows, on_event)
 }
 
-/// Forward input (keystrokes, pasted text) to a shell.
+/// Forward input (keystrokes, pasted text) to a shell. The write happens on a
+/// blocking-pool thread with only the per-session writer locked, so a pane
+/// whose program stopped reading stdin can't stall the UI or other panes.
 #[tauri::command]
-fn pty_write(state: State<PtyManager>, id: u32, data: String) -> Result<(), String> {
-    state.write(id, data.as_bytes())
+async fn pty_write(state: State<'_, PtyManager>, id: u32, data: String) -> Result<(), String> {
+    use std::io::Write as _;
+    let writer = state.writer(id)?;
+    blocking(move || {
+        let mut w = writer.lock().unwrap();
+        w.write_all(data.as_bytes()).map_err(|e| e.to_string())?;
+        w.flush().map_err(|e| e.to_string())
+    })
+    .await
 }
 
 /// Resize a PTY when its pane changes size.
 #[tauri::command]
-fn pty_resize(state: State<PtyManager>, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+async fn pty_resize(
+    state: State<'_, PtyManager>,
+    id: u32,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
     state.resize(id, cols, rows)
 }
 
 /// Kill a shell when its pane is closed.
 #[tauri::command]
-fn pty_kill(state: State<PtyManager>, id: u32) -> Result<(), String> {
+async fn pty_kill(state: State<'_, PtyManager>, id: u32) -> Result<(), String> {
     state.kill(id)
 }
 
@@ -522,4 +631,99 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- ascii_ci_contains ----------------------------------------------------
+
+    #[test]
+    fn ci_contains_matches_case_insensitively() {
+        assert!(ascii_ci_contains(b"Hello World", b"world"));
+        assert!(ascii_ci_contains(b"HELLO", b"hello"));
+        assert!(ascii_ci_contains(b"abc", b"abc"));
+    }
+
+    #[test]
+    fn ci_contains_handles_empty_and_oversized_needles() {
+        assert!(ascii_ci_contains(b"anything", b""));
+        assert!(ascii_ci_contains(b"", b""));
+        assert!(!ascii_ci_contains(b"ab", b"abc"));
+        assert!(!ascii_ci_contains(b"", b"a"));
+    }
+
+    #[test]
+    fn ci_contains_survives_repeated_prefixes() {
+        // First bytes match repeatedly before the real hit.
+        assert!(ascii_ci_contains(b"aaab", b"aab"));
+        assert!(!ascii_ci_contains(b"aaa", b"aab"));
+    }
+
+    // -- extract_count ----------------------------------------------------------
+
+    #[test]
+    fn extract_count_reads_ahead_and_behind() {
+        assert_eq!(extract_count("[ahead 3]", "ahead"), 3);
+        assert_eq!(extract_count("[ahead 2, behind 15]", "behind"), 15);
+        assert_eq!(extract_count("[behind 7]", "ahead"), 0);
+        assert_eq!(extract_count("", "ahead"), 0);
+    }
+
+    // -- parse_porcelain_status ---------------------------------------------------
+
+    #[test]
+    fn parses_branch_with_upstream_and_counts() {
+        let raw = "## main...origin/main [ahead 1, behind 2]\0M  a.rs\0 M b.txt\0?? new file.txt\0";
+        let (branch, upstream, ahead, behind, files) = parse_porcelain_status(raw);
+        assert_eq!(branch, "main");
+        assert_eq!(upstream.as_deref(), Some("origin/main"));
+        assert_eq!(ahead, 1);
+        assert_eq!(behind, 2);
+        assert_eq!(files.len(), 3);
+        assert_eq!(
+            (
+                files[0].x.as_str(),
+                files[0].y.as_str(),
+                files[0].path.as_str()
+            ),
+            ("M", " ", "a.rs")
+        );
+        assert_eq!((files[1].x.as_str(), files[1].y.as_str()), (" ", "M"));
+        // Paths with spaces survive the -z record split.
+        assert_eq!(files[2].path, "new file.txt");
+    }
+
+    #[test]
+    fn parses_branch_without_upstream_and_empty_repo() {
+        let (branch, upstream, ..) = parse_porcelain_status("## feature/x\0");
+        assert_eq!(branch, "feature/x");
+        assert_eq!(upstream, None);
+
+        let (branch, ..) = parse_porcelain_status("## No commits yet on main\0");
+        assert_eq!(branch, "main");
+    }
+
+    #[test]
+    fn index_rename_skips_origin_path_record() {
+        let raw = "## main\0R  new-name.rs\0old-name.rs\0M  other.rs\0";
+        let (.., files) = parse_porcelain_status(raw);
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, "new-name.rs");
+        assert_eq!(files[1].path, "other.rs");
+    }
+
+    #[test]
+    fn worktree_rename_also_skips_origin_path_record() {
+        // ` R` (rename in the work tree, e.g. after `git add -N`) also carries an
+        // origin-path record; treating it as a plain entry would inject a phantom
+        // file whose "status" is the first bytes of the origin path.
+        let raw = "## main\0 R renamed.rs\0origin.rs\0M  real.rs\0";
+        let (.., files) = parse_porcelain_status(raw);
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, "renamed.rs");
+        assert_eq!((files[0].x.as_str(), files[0].y.as_str()), (" ", "R"));
+        assert_eq!(files[1].path, "real.rs");
+    }
 }

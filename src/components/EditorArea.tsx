@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../state/store";
 import { isDirty } from "../state/editor";
+import { trackPointerDrag } from "../drag";
 
 const isMac =
   /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
@@ -20,6 +21,11 @@ export function EditorArea() {
   const requested = useRef<Set<string>>(new Set());
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Tear down a live resize drag if the editor unmounts mid-drag (the column
+  // closes with its last file) so its window listeners don't leak.
+  useEffect(() => () => cleanupRef.current?.(), []);
 
   const active = editor.files.find((f) => f.path === editor.activePath) ?? null;
   const editing = active && !active.loading && active.saved !== null;
@@ -78,14 +84,13 @@ export function EditorArea() {
     const startX = e.clientX;
     const startW = width;
     const max = Math.max(360, window.innerWidth - 360);
-    const onMove = (ev: PointerEvent) =>
-      setWidth(Math.min(max, Math.max(320, startW + ev.clientX - startX)));
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    cleanupRef.current = trackPointerDrag(
+      e,
+      (ev) => setWidth(Math.min(max, Math.max(320, startW + ev.clientX - startX))),
+      () => {
+        cleanupRef.current = null;
+      }
+    );
   };
 
   // Keep the gutter aligned with the text area as it scrolls.
@@ -116,13 +121,27 @@ export function EditorArea() {
       style={{ width }}
       onPointerDownCapture={() => store.setFocusRegion("editor")}
     >
-      <div className="editor-tabs">
+      <div className="editor-tabs" role="tablist" aria-label="Open files">
         {editor.files.map((f) => (
           <div
             key={f.path}
             className={`etab${f.path === editor.activePath ? " etab-active" : ""}`}
             title={f.path}
-            onPointerDown={() => store.selectFile(f.path)}
+            role="tab"
+            tabIndex={0}
+            aria-selected={f.path === editor.activePath}
+            // Tab-strip convention: select on press, not click — but only for
+            // the primary button so right/middle clicks don't switch files.
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              store.selectFile(f.path);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                store.selectFile(f.path);
+              }
+            }}
           >
             <span className="etab-title">{f.name}</span>
             {isDirty(f) ? (
@@ -131,7 +150,14 @@ export function EditorArea() {
             <button
               className="etab-close"
               aria-label={`Close ${f.name}`}
+              // Swallow the press so it neither selects the tab underneath nor
+              // steals focus; the action runs on click so keyboard Enter/Space
+              // still works.
               onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onClick={(e) => {
                 e.stopPropagation();
                 store.requestCloseFile(f.path);
               }}

@@ -41,7 +41,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'jterm ${{ github.ref_name }}'
-          releaseBody: 'See the [changelog](https://github.com/yosefashenafi/jterm/blob/main/CHANGELOG.md) for what changed. Builds are unsigned — see the README for first-launch steps.'
+          releaseBody: 'See the [changelog](https://github.com/yosefashenafi/jterm/blob/main/CHANGELOG.md) for what changed. Builds are unsigned; see the README for first-launch steps.'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

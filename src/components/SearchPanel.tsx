@@ -114,7 +114,10 @@ export function SearchPanel() {
             title={allCollapsed ? "Expand all" : "Collapse all"}
             aria-label={allCollapsed ? "Expand all" : "Collapse all"}
             disabled={results.length === 0}
-            onPointerDown={toggleAll}
+            // Act on click so Enter/Space work too; swallowing pointerdown
+            // keeps mouse clicks from stealing focus away from the terminal.
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={toggleAll}
           >
             {allCollapsed ? <ChevronIcon /> : <CollapseAllIcon />}
           </button>
@@ -158,7 +161,8 @@ export function SearchPanel() {
               <button
                 className="search-file-head"
                 title={file.path}
-                onPointerDown={() => toggleFile(file.path)}
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => toggleFile(file.path)}
               >
                 <ChevronIcon className={`tree-chevron${open ? " open" : ""}`} />
                 <span className="search-file-name">{basename(file.rel)}</span>
@@ -171,7 +175,8 @@ export function SearchPanel() {
                     key={`${m.line}:${i}`}
                     className="search-match"
                     title={`Line ${m.line}`}
-                    onPointerDown={() => openFile(file.path, m.line)}
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => openFile(file.path, m.line)}
                   >
                     <span className="search-match-line">{m.line}</span>
                     <span className="search-match-text">

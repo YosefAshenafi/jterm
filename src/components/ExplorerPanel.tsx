@@ -65,7 +65,10 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
         className="tree-row"
         style={indentStyle(depth)}
         title={entry.path}
-        onPointerDown={() => ctx.onFile(entry.path)}
+        // Act on click so Enter/Space work too; swallowing pointerdown keeps
+        // mouse clicks from stealing focus away from the terminal.
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={() => ctx.onFile(entry.path)}
       >
         <span className="tree-chevron-spacer" />
         <FileIcon className="tree-icon file" />
@@ -81,6 +84,7 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
         className="tree-row"
         style={indentStyle(depth)}
         title={`${entry.path}  ·  double-click to cd`}
+        onPointerDown={(e) => e.preventDefault()}
         onClick={() => ctx.toggle(entry.path)}
         onDoubleClick={() => ctx.onCd(entry.path)}
       >
@@ -109,7 +113,9 @@ export function ExplorerPanel() {
         return next;
       }),
     onFile: (path) => openFile(path),
-    onCd: (path) => activePaneId && terminals.sendText(activePaneId, `cd ${shellQuote(path)}\n`),
+    // "\r" mirrors a real Enter keypress: Unix line discipline maps CR to NL
+    // on input, and Windows ConPTY only executes the line on CR — not LF.
+    onCd: (path) => activePaneId && terminals.sendText(activePaneId, `cd ${shellQuote(path)}\r`),
   };
 
   return (
@@ -122,7 +128,8 @@ export function ExplorerPanel() {
             title="Collapse all folders"
             aria-label="Collapse all folders"
             disabled={expanded.size === 0}
-            onPointerDown={() => setExpanded(new Set())}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => setExpanded(new Set())}
           >
             <CollapseAllIcon />
           </button>
@@ -130,7 +137,8 @@ export function ExplorerPanel() {
             className="tool-btn icon-btn small"
             title="Refresh"
             aria-label="Refresh"
-            onPointerDown={() => setRefreshKey((k) => k + 1)}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => setRefreshKey((k) => k + 1)}
           >
             <SyncIcon />
           </button>

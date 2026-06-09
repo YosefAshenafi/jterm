@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Nothing yet. See the [roadmap](README.md#roadmap) for what's planned._
 
-## [0.1.0] — 2026-06-10
+## [0.1.0] - 2026-06-10
 
 The first public release. A fast, native terminal for macOS and Windows with
 tabs, recursive split panes, full mouse support, and a VS Code-style workspace.
@@ -34,10 +34,10 @@ tabs, recursive split panes, full mouse support, and a VS Code-style workspace.
     split, and new-tab actions.
   - VS Code-style sidebar with three views: Explorer (lazy file tree), Search
     (parallel full-text search, `⌘⇧F`), and Source Control (Git status, stage,
-    commit, push, init — `⌘⇧G`).
+    commit, push, init; `⌘⇧G`).
   - File editor column with tabbed buffers, dirty tracking, a line-number gutter,
     save (`⌘S`), and an unsaved-changes guard on close.
-- **Settings** — accent color, terminal font size, and cursor blink, applied live
+- **Settings**: accent color, terminal font size, and cursor blink, applied live
   and persisted to `localStorage`.
 
 ### Security

@@ -28,12 +28,29 @@ export function TabBar() {
 
   return (
     <div className="tabbar" data-tauri-drag-region>
-      <div className="tabs">
+      <div className="tabs" role="tablist">
         {state.tabs.map((tab) => (
           <div
             key={tab.id}
+            role="tab"
+            tabIndex={0}
+            aria-selected={tab.id === state.activeTabId}
             className={`tab${tab.id === state.activeTabId ? " tab-active" : ""}`}
-            onPointerDown={() => selectTab(tab.id)}
+            // Select on pointerdown (not click) so switching feels instant,
+            // like native tab strips — but only for the primary button.
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              selectTab(tab.id);
+            }}
+            onKeyDown={(e) => {
+              // Only when the tab itself is focused — keys from the close
+              // button or rename input must not also switch tabs.
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                selectTab(tab.id);
+              }
+            }}
             title={editingId === tab.id ? undefined : `${tab.title}  ·  double-click to rename`}
           >
             {editingId === tab.id ? (
@@ -59,7 +76,15 @@ export function TabBar() {
             <button
               className="tab-close"
               aria-label="Close tab"
+              // preventDefault on pointerdown keeps focus in the terminal;
+              // closing happens on click so keyboard activation works.
+              // stopPropagation in both handlers so the parent tab never
+              // selects when closing.
               onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={(e) => {
                 e.stopPropagation();
                 closeTab(tab.id);
               }}
@@ -69,7 +94,12 @@ export function TabBar() {
           </div>
         ))}
       </div>
-      <button className="tab-new" aria-label="New tab" onPointerDown={() => newTab()}>
+      <button
+        className="tab-new"
+        aria-label="New tab"
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={() => newTab()}
+      >
         +
       </button>
     </div>

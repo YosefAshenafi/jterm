@@ -12,10 +12,12 @@ import {
 } from "./icons";
 import { SettingsDialog } from "./SettingsDialog";
 
-/** Expand a leading `~` to the home directory; otherwise pass the path through. */
+/** Expand a leading `~` to the home directory; otherwise pass the path through.
+ * Accepts `~\` as well as `~/` since Windows users type backslashes, and Win32
+ * happily mixes separators — so joining with `/` is safe everywhere. */
 async function expandPath(raw: string): Promise<string> {
-  if (raw === "~" || raw.startsWith("~/")) {
-    const home = (await homeDir()).replace(/\/+$/, "");
+  if (raw === "~" || raw.startsWith("~/") || raw.startsWith("~\\")) {
+    const home = (await homeDir()).replace(/[\\/]+$/, "");
     return raw === "~" ? home : `${home}/${raw.slice(2)}`;
   }
   return raw;
@@ -140,6 +142,10 @@ export function Toolbar() {
     setEditing(false);
   };
 
+  // Toolbar buttons act on click so Enter/Space work, but swallow pointerdown
+  // so a mouse press never steals focus from the terminal.
+  const keepFocus = (e: React.PointerEvent) => e.preventDefault();
+
   return (
     <>
     <div className="toolbar">
@@ -148,7 +154,8 @@ export function Toolbar() {
         title="Show the first terminal's folder in the sidebar"
         aria-label="Show first terminal's folder"
         aria-pressed={sidebarOpen && sidebarView === "explorer"}
-        onPointerDown={openSidebar}
+        onPointerDown={keepFocus}
+        onClick={openSidebar}
       >
         <FolderIcon />
       </button>
@@ -177,6 +184,7 @@ export function Toolbar() {
         ) : projectRoot ? (
           <button
             className="project-name"
+            onPointerDown={keepFocus}
             onClick={startEdit}
             title="Click to change the folder shown in the sidebar"
           >
@@ -184,7 +192,12 @@ export function Toolbar() {
             <span className="project-path">{projectRoot}</span>
           </button>
         ) : (
-          <button className="project-name project-empty" onClick={startEdit} title="Click to open a folder">
+          <button
+            className="project-name project-empty"
+            onPointerDown={keepFocus}
+            onClick={startEdit}
+            title="Click to open a folder"
+          >
             No folder open
           </button>
         )}
@@ -195,7 +208,8 @@ export function Toolbar() {
           className="tool-btn icon-btn"
           title="Split left/right"
           aria-label="Split vertical"
-          onPointerDown={() => split("row")}
+          onPointerDown={keepFocus}
+          onClick={() => split("row")}
         >
           <SplitVerticalIcon />
         </button>
@@ -203,7 +217,8 @@ export function Toolbar() {
           className="tool-btn icon-btn"
           title="Split top/bottom"
           aria-label="Split horizontal"
-          onPointerDown={() => split("column")}
+          onPointerDown={keepFocus}
+          onClick={() => split("column")}
         >
           <SplitHorizontalIcon />
         </button>
@@ -214,7 +229,8 @@ export function Toolbar() {
           title="Settings"
           aria-label="Settings"
           aria-pressed={settingsOpen}
-          onPointerDown={() => setSettingsOpen(true)}
+          onPointerDown={keepFocus}
+          onClick={() => setSettingsOpen(true)}
         >
           <GearIcon />
         </button>

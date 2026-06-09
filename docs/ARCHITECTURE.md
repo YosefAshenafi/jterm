@@ -9,15 +9,15 @@ you're about to make a non-trivial change, start here.
 jterm is a [Tauri](https://tauri.app) app, which means two halves talking over a
 local IPC bridge:
 
-- a **webview frontend** — React + TypeScript + [xterm.js](https://xtermjs.org),
+- a **webview frontend**: React + TypeScript + [xterm.js](https://xtermjs.org),
   bundled by Vite, rendering the UI; and
-- a **Rust backend** — the privileged side that spawns shells, touches the
+- a **Rust backend**: the privileged side that spawns shells, touches the
   filesystem, and runs `git`.
 
 The frontend can't open a PTY or read a file directly; it asks the backend to,
 through `invoke("command_name", args)`. The backend exposes a fixed set of
 commands (listed below) and nothing else. There's no network server and no
-remote anything — both halves run on your machine, in one process tree.
+remote anything; both halves run on your machine, in one process tree.
 
 ```
 ┌─────────────────────────── webview (frontend) ───────────────────────────┐
@@ -40,8 +40,8 @@ The xterm.js `Terminal` objects, their DOM elements, and the backend PTY ids are
 **not** React state. React components (`TerminalPane.tsx`) only ask the manager
 to `attach` a pane's element into a container, and to `fit`/`focus` it.
 
-Why: a terminal holds a lot of live, expensive state — the running shell, the
-scrollback buffer, the WebGL context. If that lived in React, every split, tab
+Why: a terminal holds a lot of live, expensive state (the running shell, the
+scrollback buffer, the WebGL context). If that lived in React, every split, tab
 switch, or layout change would risk unmounting and recreating it, which would
 kill the shell and wipe scrollback. By keeping terminals in a plain manager and
 moving only their DOM nodes around, layout changes are cheap and non-destructive.
@@ -83,9 +83,9 @@ partial sequences on its end. When the shell exits, the reader thread sends
 A tab's layout is a binary tree (`state/types.ts`):
 
 - a **leaf** is one terminal (`{ type: "leaf", id }`), and
-- a **split** has two children and a direction — `row` (left/right, vertical
-  divider) or `column` (top/bottom, horizontal divider) — plus the two fraction
-  `sizes` that sum to 1.
+- a **split** has two children, a direction (`row` for left/right with a
+  vertical divider, `column` for top/bottom with a horizontal divider), and the
+  two fraction `sizes` that sum to 1.
 
 `state/tree.ts` holds the pure operations over that tree: `splitPane` (replace a
 leaf with a split of itself + a new sibling), `removePane` (delete a leaf and
@@ -100,7 +100,7 @@ and turns divider drags into `resizeSplit` actions.
 `state/store.tsx` is the single store, exposed to components as a typed API via
 context. It's intentionally a mix:
 
-- a **`useReducer`** for the tab/pane structure — the part with non-trivial
+- a **`useReducer`** for the tab/pane structure, the part with non-trivial
   transitions (split, close-and-collapse, focus, zoom, rename), all in one pure
   reducer;
 - plain **`useState`** for the looser bits (sidebar open/view, project root,
@@ -121,7 +121,7 @@ Two details that catch people:
 content, `null` until the read resolves) and `draft` (current editor text). A
 buffer is *dirty* exactly when `draft !== saved`. Saving writes `draft` to disk
 and sets `saved = draft`; closing a dirty buffer prompts first. Buffers are
-global — they don't belong to a terminal tab — and the active file is tracked
+global (they don't belong to a terminal tab) and the active file is tracked
 separately so the editor column and the terminal can each hold keyboard focus
 (`focusRegion` decides whether `⌘S`/`⌘W` hit the editor or the terminal).
 
@@ -154,7 +154,7 @@ keyed by an id handed back to the frontend. `spawn` opens a PTY via
 (`$SHELL`/`/bin/zsh` on Unix, `%COMSPEC%`/PowerShell on Windows) with
 `TERM=xterm-256color`, and starts the reader thread. It records the child's pid
 so `pane_cwd` can resolve the shell's working directory through the OS process
-table (via [`sysinfo`](https://docs.rs/sysinfo)) — that's how "Sync" and the
+table (via [`sysinfo`](https://docs.rs/sysinfo)); that's how "Sync" and the
 sidebar know which folder a pane is in.
 
 ### Search (`search_in_folder`)
@@ -183,8 +183,8 @@ ASCII queries take a no-allocation case-insensitive substring path
 
 Rather than link a git library, jterm shells out to the `git` already on your
 `PATH`, so it inherits your config, credentials, and hooks. `git_status` parses
-`git status --porcelain=v1 --branch -uall -z` — NUL-delimited so filenames with
-spaces or newlines are safe — into a branch, upstream, ahead/behind counts, and
+`git status --porcelain=v1 --branch -uall -z` (NUL-delimited, so filenames with
+spaces or newlines are safe) into a branch, upstream, ahead/behind counts, and
 per-file index/worktree status chars. The other commands are thin `git add` /
 `reset` / `commit` / `push` / `init` wrappers run in the selected folder.
 
@@ -199,12 +199,12 @@ network listener.
 
 ## Extending it
 
-- **A new backend capability** → add a `#[tauri::command]` in `lib.rs`, register
+- **A new backend capability**: add a `#[tauri::command]` in `lib.rs`, register
   it in `generate_handler!`, grant any new permission in `capabilities/`, and
   call it with `invoke`. See CONTRIBUTING for the step-by-step.
-- **A new sidebar view** → add it to the `SidebarView` union and the
+- **A new sidebar view**: add it to the `SidebarView` union and the
   `ActivityBar`, and render it from `Sidebar.tsx`.
-- **A new layout operation** → add a pure function in `tree.ts`, an action in the
+- **A new layout operation**: add a pure function in `tree.ts`, an action in the
   store reducer, and a key/menu binding in `App.tsx`. Keep the tree ops pure.
-- **Theming/config** → today the defaults live in `terminal/theme.ts` and user
+- **Theming/config**: today the defaults live in `terminal/theme.ts` and user
   prefs in `settings.ts`; a real config file is the next planned step.

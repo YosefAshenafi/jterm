@@ -1,7 +1,7 @@
 # Contributing to jterm
 
 Thanks for taking the time. jterm is small on purpose, so it's an easy codebase
-to get into — the whole thing is a few thousand lines split between a Rust
+to get into; the whole thing is a few thousand lines split between a Rust
 backend and a React/TypeScript frontend.
 
 ## Getting set up
@@ -20,19 +20,19 @@ Frontend changes reload instantly; Rust changes trigger a recompile.
 
 ## Project layout
 
-- `src-tauri/` — the Rust backend.
-  - `src/pty.rs` — `PtyManager`: spawning shells, the per-PTY reader thread,
+- `src-tauri/`: the Rust backend.
+  - `src/pty.rs`: `PtyManager`. Spawning shells, the per-PTY reader thread,
     write/resize/kill, and cwd lookup.
-  - `src/lib.rs` — every Tauri command (PTY, file I/O, search, Git) and the app
+  - `src/lib.rs`: every Tauri command (PTY, file I/O, search, Git) and the app
     builder that registers them.
-- `src/` — the React/TypeScript frontend.
-  - `state/` — the pane-tree data model (`types.ts`), pure tree operations
+- `src/`: the React/TypeScript frontend.
+  - `state/`: the pane-tree data model (`types.ts`), pure tree operations
     (`tree.ts`), the store (`store.tsx`), and the editor/settings reducers.
-  - `terminal/` — the xterm + PTY manager that lives outside React, and the
+  - `terminal/`: the xterm + PTY manager that lives outside React, and the
     theme.
-  - `components/` — the UI.
-  - `workspace.ts` — path and cwd helpers.
-  - `App.tsx` — layout, keyboard shortcuts, and the wiring between the manager
+  - `components/`: the UI.
+  - `workspace.ts`: path and cwd helpers.
+  - `App.tsx`: layout, keyboard shortcuts, and the wiring between the manager
     and the store.
 
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) explains how these fit together
@@ -45,12 +45,12 @@ subtle bugs:
 
 1. **Terminals live outside React.** xterm instances and their PTYs are owned by
    `terminal/manager.ts`, keyed by pane id. React only attaches/detaches their
-   DOM elements. Don't move terminal state into React state — that's what keeps a
+   DOM elements. Don't move terminal state into React state; that's what keeps a
    shell and its scrollback alive across splits and tab switches.
 2. **Tree operations are pure.** Everything in `state/tree.ts` returns a new tree
    and never mutates. The reducer depends on that for predictable re-renders.
 3. **Don't truncate files.** The editor and search both refuse binaries and
-   oversized files rather than reading a partial buffer. Keep that — silently
+   oversized files rather than reading a partial buffer. Keep that; silently
    truncating then saving would destroy data.
 4. **Search must stay cancellable.** Each query bumps a generation counter and
    in-flight scans bail when superseded. If you touch search, keep it off the UI
@@ -66,17 +66,17 @@ Tauri commands are the bridge between the UI and the OS. To add one:
 3. If it needs a capability that isn't already granted (a new plugin permission),
    add it to `src-tauri/capabilities/default.json`.
 4. Call it from the frontend with `invoke("your_command", { …args })`. Argument
-   names are camelCase on the JS side and snake_case in Rust — Tauri maps them.
+   names are camelCase on the JS side and snake_case in Rust; Tauri maps them.
 
 ## Style
 
-- **Rust** — run `cargo fmt` before committing. CI checks formatting and runs
+- **Rust**: run `cargo fmt` before committing. CI checks formatting and runs
   `cargo clippy`. Prefer returning `Result` over `unwrap()` in command paths.
-- **TypeScript** — 2-space indent, the existing import ordering, and the comment
+- **TypeScript**: 2-space indent, the existing import ordering, and the comment
   style already in the files (explain *why*, not *what*). `tsc` runs in strict
   mode with `noUnusedLocals`/`noUnusedParameters`, so dead code fails the build.
 - Keep comments where the reasoning is non-obvious. This codebase has a fair
-  number, and they earn their keep — match that bar rather than over- or
+  number, and they earn their keep, so match that bar rather than over- or
   under-commenting.
 
 ## Tests
@@ -88,7 +88,7 @@ cargo test --manifest-path src-tauri/Cargo.toml   # backend
 
 The suite focuses on pure logic: tree manipulation, the editor reducer, settings
 parsing, and the Rust search/Git-status helpers. If you change any of those,
-update or add a test. UI components aren't unit-tested yet — manual verification
+update or add a test. UI components aren't unit-tested yet; manual verification
 in `pnpm tauri dev` is expected for UI changes; describe what you checked in the
 PR.
 
@@ -97,7 +97,7 @@ PR.
 - Branch off `main`, keep the change focused, and write a clear description of
   what and why.
 - Make sure `pnpm test:run`, `cargo test`, `pnpm build`, and `cargo fmt --check`
-  all pass — that's exactly what CI runs.
+  all pass; that's exactly what CI runs.
 - Note anything you verified by hand (which OS, which flows).
 - Add a `CHANGELOG.md` entry under **Unreleased** for anything user-facing.
 

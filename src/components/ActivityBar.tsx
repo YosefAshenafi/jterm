@@ -22,7 +22,11 @@ export function ActivityBar() {
           title={it.label}
           aria-label={it.label}
           aria-pressed={sidebarView === it.view}
-          onPointerDown={() => openSidebarView(it.view)}
+          // preventDefault on pointerdown keeps focus in the terminal; the
+          // action runs on click so keyboard activation works and right/middle
+          // clicks are ignored.
+          onPointerDown={(e) => e.preventDefault()}
+          onClick={() => openSidebarView(it.view)}
         >
           {it.icon}
         </button>
