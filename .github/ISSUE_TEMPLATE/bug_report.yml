@@ -1,0 +1,53 @@
+name: Bug report
+description: Something isn't working the way it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report. Please fill in enough that someone can reproduce it.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: I split a pane with ⌘D and the shell in the original pane died.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open jterm
+        2. Run `htop`
+        3. Press ⌘D
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Other (note it below)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: jterm version
+      description: From the Settings → About panel, or the release/commit you built.
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: shell
+    attributes:
+      label: Shell
+      placeholder: zsh 5.9 / PowerShell 7.4
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Logs, screenshots, or context. Drag images straight in.

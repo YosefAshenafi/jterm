@@ -1,0 +1,47 @@
+name: Release
+
+# Tag a version (e.g. `git tag v0.2.0 && git push origin v0.2.0`) to build the
+# macOS and Windows installers and attach them to a draft GitHub release.
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            args: '--target universal-apple-darwin'
+          - os: windows-latest
+            args: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'jterm ${{ github.ref_name }}'
+          releaseBody: 'See the [changelog](https://github.com/yosefashenafi/jterm/blob/main/CHANGELOG.md) for what changed. Builds are unsigned — see the README for first-launch steps.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
