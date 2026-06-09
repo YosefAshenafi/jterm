@@ -86,7 +86,13 @@ export function TerminalPane({
               className="pane-tool"
               aria-label={zoomed ? "Restore split" : "Maximize terminal"}
               title={zoomed ? "Restore split  ·  ⌘M" : "Maximize  ·  ⌘M"}
+              // Swallow the press so the terminal keeps focus; the action runs
+              // on click so keyboard Enter/Space still works.
               onPointerDown={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+              }}
+              onClick={(e) => {
                 e.stopPropagation();
                 onToggleZoom();
               }}
@@ -98,7 +104,12 @@ export function TerminalPane({
             className="pane-tool pane-tool-close"
             aria-label="Close terminal"
             title="Close terminal  ·  ⌘W"
+            // Same focus-preserving press / click-activated pattern as above.
             onPointerDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            onClick={(e) => {
               e.stopPropagation();
               onClose();
             }}

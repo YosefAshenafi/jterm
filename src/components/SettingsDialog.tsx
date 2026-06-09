@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { useStore } from "../state/store";
 import { ACCENT_PRESETS, DEFAULT_SETTINGS } from "../state/settings";
 
@@ -10,6 +11,13 @@ const FONT_MAX = 28;
  * preview reflects the accent and cursor choices as they're made. */
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { settings, updateSettings } = useStore();
+
+  // Version comes from the running app (tauri.conf.json), so the About box
+  // can't drift from the build the way a hardcoded string would.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -27,6 +35,10 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const setFont = (n: number) =>
     updateSettings({ fontSize: Math.min(FONT_MAX, Math.max(FONT_MIN, n)) });
 
+  // Buttons act on click so Enter/Space work, but swallow pointerdown so a
+  // mouse press never steals focus from the terminal behind the dialog.
+  const keepFocus = (e: React.PointerEvent) => e.preventDefault();
+
   return (
     <div className="modal-overlay" onPointerDown={onClose}>
       <div
@@ -41,7 +53,12 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <span className="modal-eyebrow">jterm</span>
             <h2 className="modal-title">Settings</h2>
           </div>
-          <button className="modal-close" aria-label="Close settings" onPointerDown={onClose}>
+          <button
+            className="modal-close"
+            aria-label="Close settings"
+            onPointerDown={keepFocus}
+            onClick={onClose}
+          >
             ×
           </button>
         </header>
@@ -75,7 +92,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                     title={c}
                     aria-label={`Accent color ${c}`}
                     aria-pressed={accentSelected(c)}
-                    onPointerDown={() => updateSettings({ accent: c })}
+                    onPointerDown={keepFocus}
+                    onClick={() => updateSettings({ accent: c })}
                   >
                     {accentSelected(c) ? <span className="swatch-check">✓</span> : null}
                   </button>
@@ -101,7 +119,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                   className="stepper-btn"
                   aria-label="Decrease font size"
                   disabled={settings.fontSize <= FONT_MIN}
-                  onPointerDown={() => setFont(settings.fontSize - 1)}
+                  onPointerDown={keepFocus}
+                  onClick={() => setFont(settings.fontSize - 1)}
                 >
                   −
                 </button>
@@ -113,7 +132,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                   className="stepper-btn"
                   aria-label="Increase font size"
                   disabled={settings.fontSize >= FONT_MAX}
-                  onPointerDown={() => setFont(settings.fontSize + 1)}
+                  onPointerDown={keepFocus}
+                  onClick={() => setFont(settings.fontSize + 1)}
                 >
                   +
                 </button>
@@ -130,7 +150,8 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
                 role="switch"
                 aria-checked={settings.cursorBlink}
                 aria-label="Cursor blink"
-                onPointerDown={() => updateSettings({ cursorBlink: !settings.cursorBlink })}
+                onPointerDown={keepFocus}
+                onClick={() => updateSettings({ cursorBlink: !settings.cursorBlink })}
               >
                 <span className="toggle-knob" />
               </button>
@@ -143,9 +164,11 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
               <div className="about-mark" aria-hidden="true">&gt;_</div>
               <div className="about-text">
                 <div className="about-name">
-                  jterm <span className="about-version">v0.1.0</span>
+                  jterm{" "}
+                  {version !== null && (
+                    <span className="about-version">v{version}</span>
+                  )}
                 </div>
-                <div className="about-sub">Jossy&rsquo;s Terminal</div>
                 <p className="about-desc">
                   A fast, tabbed, splittable terminal with full mouse support and a
                   built-in file editor. Built with Tauri + React.
@@ -160,10 +183,14 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             <kbd>Esc</kbd> to close
           </span>
           <div className="modal-footer-actions">
-            <button className="btn btn-ghost" onPointerDown={() => updateSettings(DEFAULT_SETTINGS)}>
+            <button
+              className="btn btn-ghost"
+              onPointerDown={keepFocus}
+              onClick={() => updateSettings(DEFAULT_SETTINGS)}
+            >
               Reset to defaults
             </button>
-            <button className="btn btn-primary" onPointerDown={onClose}>
+            <button className="btn btn-primary" onPointerDown={keepFocus} onClick={onClose}>
               Done
             </button>
           </div>

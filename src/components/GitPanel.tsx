@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../state/store";
 import { basename, dirname } from "../workspace";
@@ -37,6 +37,55 @@ function StatusBadge({ code }: { code: string }) {
   );
 }
 
+// Buttons act on click so they stay keyboard-operable (and ignore right/middle
+// presses); pointerdown is only suppressed so clicking never steals focus from
+// the terminal.
+const preserveFocus = (e: ReactPointerEvent) => e.preventDefault();
+
+// Module scope so the row keeps a stable component identity — defined inside
+// GitPanel it would remount every row (dropping focus/hover) on each
+// commit-message keystroke.
+function FileRow({
+  file,
+  code,
+  staged,
+  busy,
+  onOpen,
+  onAction,
+}: {
+  file: GitFile;
+  code: string;
+  staged: boolean;
+  busy: boolean;
+  onOpen: (file: string) => void;
+  onAction: (file: string) => void;
+}) {
+  return (
+    <div className="git-row">
+      <button
+        className="git-row-main"
+        title={file.path}
+        onPointerDown={preserveFocus}
+        onClick={() => onOpen(file.path)}
+      >
+        <span className="git-row-name">{basename(file.path)}</span>
+        <span className="git-row-dir">{dirname(file.path)}</span>
+      </button>
+      <button
+        className="git-row-action"
+        title={staged ? "Unstage" : "Stage"}
+        aria-label={staged ? `Unstage ${file.path}` : `Stage ${file.path}`}
+        disabled={busy}
+        onPointerDown={preserveFocus}
+        onClick={() => onAction(file.path)}
+      >
+        {staged ? <MinusIcon /> : <PlusIcon />}
+      </button>
+      <StatusBadge code={code} />
+    </div>
+  );
+}
+
 /** Source Control: branch, staged/unstaged changes, commit message + push. */
 export function GitPanel() {
   const { projectRoot, openFile } = useStore();
@@ -45,20 +94,28 @@ export function GitPanel() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
     if (!projectRoot) {
       setStatus(null);
       return;
     }
+    // Sequence guard (same role as the `alive` flags in ExplorerPanel/SearchPanel):
+    // projectRoot changes with live-debounced path edits, and a slow git_status on a
+    // big repo can resolve after a newer one — only the latest request may win.
+    const seq = ++seqRef.current;
     setLoading(true);
     try {
-      setStatus(await invoke<GitStatus>("git_status", { path: projectRoot }));
+      const next = await invoke<GitStatus>("git_status", { path: projectRoot });
+      if (seq !== seqRef.current) return;
+      setStatus(next);
       setError(null);
     } catch (e) {
+      if (seq !== seqRef.current) return;
       setError(String(e));
     } finally {
-      setLoading(false);
+      if (seq === seqRef.current) setLoading(false);
     }
   }, [projectRoot]);
 
@@ -97,25 +154,6 @@ export function GitPanel() {
   const changes = (status?.files ?? []).filter((f) => f.y !== " ");
   const canCommit = staged.length > 0 && message.trim().length > 0 && !busy;
 
-  const FileRow = ({ file, code, staged: isStaged }: { file: GitFile; code: string; staged: boolean }) => (
-    <div className="git-row">
-      <button className="git-row-main" title={file.path} onPointerDown={() => open(file.path)}>
-        <span className="git-row-name">{basename(file.path)}</span>
-        <span className="git-row-dir">{dirname(file.path)}</span>
-      </button>
-      <button
-        className="git-row-action"
-        title={isStaged ? "Unstage" : "Stage"}
-        aria-label={isStaged ? `Unstage ${file.path}` : `Stage ${file.path}`}
-        disabled={busy}
-        onPointerDown={() => (isStaged ? unstage(file.path) : stage(file.path))}
-      >
-        {isStaged ? <MinusIcon /> : <PlusIcon />}
-      </button>
-      <StatusBadge code={code} />
-    </div>
-  );
-
   return (
     <div className="panel">
       <div className="panel-header">
@@ -126,7 +164,8 @@ export function GitPanel() {
             title="Refresh"
             aria-label="Refresh git status"
             disabled={busy || loading}
-            onPointerDown={refresh}
+            onPointerDown={preserveFocus}
+            onClick={refresh}
           >
             <SyncIcon />
           </button>
@@ -141,7 +180,7 @@ export function GitPanel() {
         ) : status && !status.is_repo ? (
           <div className="git-empty">
             <p>This folder is not a Git repository.</p>
-            <button className="btn btn-primary" disabled={busy} onPointerDown={init}>
+            <button className="btn btn-primary" disabled={busy} onPointerDown={preserveFocus} onClick={init}>
               Initialize Repository
             </button>
           </div>
@@ -154,7 +193,8 @@ export function GitPanel() {
                 title={status.upstream ? `Push to ${status.upstream}` : "Push"}
                 aria-label="Push"
                 disabled={busy}
-                onPointerDown={push}
+                onPointerDown={preserveFocus}
+                onClick={push}
               >
                 <ArrowUpIcon />
                 {status.ahead > 0 ? <span className="git-ahead">{status.ahead}</span> : null}
@@ -176,7 +216,12 @@ export function GitPanel() {
                   e.stopPropagation();
                 }}
               />
-              <button className="btn btn-primary git-commit-btn" disabled={!canCommit} onPointerDown={commit}>
+              <button
+                className="btn btn-primary git-commit-btn"
+                disabled={!canCommit}
+                onPointerDown={preserveFocus}
+                onClick={commit}
+              >
                 <CheckIcon /> Commit
               </button>
             </div>
@@ -190,7 +235,7 @@ export function GitPanel() {
                   <span className="git-section-count">{staged.length}</span>
                 </div>
                 {staged.map((f) => (
-                  <FileRow key={`s:${f.path}`} file={f} code={f.x} staged />
+                  <FileRow key={`s:${f.path}`} file={f} code={f.x} staged busy={busy} onOpen={open} onAction={unstage} />
                 ))}
               </div>
             )}
@@ -204,7 +249,8 @@ export function GitPanel() {
                     title="Stage all changes"
                     aria-label="Stage all changes"
                     disabled={busy}
-                    onPointerDown={stageAll}
+                    onPointerDown={preserveFocus}
+                    onClick={stageAll}
                   >
                     <PlusIcon />
                   </button>
@@ -215,7 +261,15 @@ export function GitPanel() {
                 <div className="tree-note">No changes</div>
               ) : (
                 changes.map((f) => (
-                  <FileRow key={`c:${f.path}`} file={f} code={f.x === "?" ? "?" : f.y} staged={false} />
+                  <FileRow
+                    key={`c:${f.path}`}
+                    file={f}
+                    code={f.x === "?" ? "?" : f.y}
+                    staged={false}
+                    busy={busy}
+                    onOpen={open}
+                    onAction={stage}
+                  />
                 ))
               )}
             </div>

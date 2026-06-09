@@ -2,7 +2,18 @@
   "name": "jterm",
   "private": true,
   "version": "0.1.0",
+  "description": "A fast, native terminal for macOS and Windows with tabs, split panes, and full mouse support",
+  "license": "MIT",
+  "author": "Yosef Ashenafi",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YosefAshenafi/jterm.git"
+  },
   "type": "module",
+  "packageManager": "pnpm@10.26.0",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
@@ -12,6 +23,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
     "tauri": "tauri"
   },
   "dependencies": {
@@ -31,7 +44,9 @@
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "jsdom": "^29.1.1",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.8"
   }
 }

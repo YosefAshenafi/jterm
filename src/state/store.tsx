@@ -331,9 +331,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveFile: async (path) => {
         const f = editor.files.find((x) => x.path === path);
         if (!f || f.saved === null || !isDirty(f)) return;
+        const written = f.draft; // snapshot — the user may keep typing mid-save
         try {
-          await invoke("write_file", { path, content: f.draft });
-          editorDispatch({ type: "saved", path });
+          await invoke("write_file", { path, content: written });
+          editorDispatch({ type: "saved", path, text: written });
         } catch (e) {
           editorDispatch({ type: "error", path, error: `Save failed: ${e}` });
         }
@@ -351,8 +352,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!discard) return;
         }
         editorDispatch({ type: "close", path });
-        // Nothing left to edit — hand the keyboard back to the terminal.
-        if (editor.files.length <= 1) setFocusRegion("terminal");
+        // Nothing left to edit — hand the keyboard back to the terminal. The
+        // flag alone only reroutes shortcuts; the terminal needs real DOM focus
+        // too, or typed characters would land on <body> until a click.
+        if (editor.files.length <= 1) {
+          setFocusRegion("terminal");
+          if (activePaneId) terminals.focus(activePaneId);
+        }
       },
       closeActiveFile: async () => {
         if (editor.activePath) await api.requestCloseFile(editor.activePath);

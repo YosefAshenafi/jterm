@@ -1,9 +1,11 @@
 [package]
 name = "jterm"
 version = "0.1.0"
-description = "A tabbed, splittable terminal with full mouse support"
-authors = ["Jossy"]
+description = "A fast, native terminal for macOS and Windows with tabs, split panes, and full mouse support"
+authors = ["Yosef Ashenafi"]
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/YosefAshenafi/jterm"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

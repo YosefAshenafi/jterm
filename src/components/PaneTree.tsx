@@ -1,7 +1,8 @@
-import { CSSProperties, useRef } from "react";
+import { CSSProperties, useEffect, useRef } from "react";
 import { Direction, PaneNode, Tab } from "../state/types";
 import { useStore } from "../state/store";
 import { collectLeaves } from "../state/tree";
+import { trackPointerDrag } from "../drag";
 import { TerminalPane } from "./TerminalPane";
 
 interface MenuRequest {
@@ -80,6 +81,11 @@ function SplitView({ node, tab, onPaneMenu }: TreeProps & { node: Extract<PaneNo
   const { resizeSplit } = useStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const frame = useRef<number | null>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // A split can be removed mid-drag (e.g. ⌘W closes a pane); tear the drag
+  // down on unmount so its listeners don't outlive the component.
+  useEffect(() => () => cleanupRef.current?.(), []);
 
   const startDrag = (e: React.PointerEvent) => {
     e.preventDefault();
@@ -91,21 +97,27 @@ function SplitView({ node, tab, onPaneMenu }: TreeProps & { node: Extract<PaneNo
     const origin = horizontal ? e.clientX : e.clientY;
     const startFraction = node.sizes[0];
 
-    const onMove = (ev: PointerEvent) => {
-      const pos = horizontal ? ev.clientX : ev.clientY;
-      let fraction = startFraction + (pos - origin) / total;
-      fraction = Math.min(0.9, Math.max(0.1, fraction));
-      if (frame.current != null) cancelAnimationFrame(frame.current);
-      frame.current = requestAnimationFrame(() =>
-        resizeSplit(tab.id, node.id, [fraction, 1 - fraction])
-      );
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    cleanupRef.current = trackPointerDrag(
+      e,
+      (ev) => {
+        const pos = horizontal ? ev.clientX : ev.clientY;
+        let fraction = startFraction + (pos - origin) / total;
+        fraction = Math.min(0.9, Math.max(0.1, fraction));
+        if (frame.current != null) cancelAnimationFrame(frame.current);
+        frame.current = requestAnimationFrame(() =>
+          resizeSplit(tab.id, node.id, [fraction, 1 - fraction])
+        );
+      },
+      () => {
+        // Drop any still-queued frame so a resize can't land after the drag
+        // ended (or after this split unmounted).
+        if (frame.current != null) {
+          cancelAnimationFrame(frame.current);
+          frame.current = null;
+        }
+        cleanupRef.current = null;
+      }
+    );
   };
 
   return (

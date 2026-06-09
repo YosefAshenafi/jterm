@@ -83,11 +83,21 @@ export default function App() {
       if (k === "f" && e.shiftKey) return run(() => store.openSidebarView("search"));
       if (k === "g" && e.shiftKey) return run(() => store.openSidebarView("git"));
 
-      // In any text field (editor, search box, commit message, folder path) only
-      // close/save are app shortcuts — copy/paste/undo/select-all stay native.
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      const inField = tag === "INPUT" || tag === "TEXTAREA";
-      const editorFocused = store.focusRegion === "editor" && store.editor.activePath;
+      // xterm types into a hidden helper <textarea>, so anything inside a
+      // terminal host is the terminal, not a text field.
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      const inTerminal = !!el?.closest(".terminal-host");
+      const inEditor = !!el?.closest(".editor");
+      // In any other text field (search box, commit message, folder path) every
+      // shortcut stays native — Cmd+W there must not close an editor file the
+      // user isn't even looking at.
+      const inField = !inTerminal && !inEditor && (tag === "INPUT" || tag === "TEXTAREA");
+      // Close/save route to the editor when the keystroke comes from inside it,
+      // or when it logically holds the keyboard (e.g. its tab strip was clicked).
+      const editorFocused =
+        inEditor ||
+        (!inTerminal && !inField && store.focusRegion === "editor" && !!store.editor.activePath);
       if (inField || editorFocused) {
         if (editorFocused && k === "w") return run(() => store.closeActiveFile());
         if (editorFocused && k === "s") return run(() => store.saveActiveFile());
@@ -97,8 +107,10 @@ export default function App() {
       if (k === "t") return run(store.newTab);
       if (k === "w") return run(store.closeActivePane);
       if (k === "m") return run(store.toggleZoomActive); // maximize/restore pane
-      if (k === "]") return run(() => store.cyclePane(1));
-      if (k === "[") return run(() => store.cyclePane(-1));
+      // Brackets by physical key: with Shift held (the Windows/Linux chord),
+      // e.key reports "}"/"{" and would never match "]"/"[".
+      if (e.code === "BracketRight") return run(() => store.cyclePane(1));
+      if (e.code === "BracketLeft") return run(() => store.cyclePane(-1));
       if (k === "v") {
         const id = activePaneId();
         if (id) return run(() => terminals.paste(id));

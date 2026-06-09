@@ -12,6 +12,7 @@ import {
   readText as clipboardRead,
   writeText as clipboardWrite,
 } from "@tauri-apps/plugin-clipboard-manager";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
 import { DEFAULT_THEME, FONT_FAMILY, FONT_SIZE } from "./theme";
 
@@ -79,7 +80,13 @@ class TerminalManager {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon());
+    // window.open goes nowhere inside a Tauri webview — route detected links
+    // through the opener plugin (whose capability is scoped to http/https).
+    term.loadAddon(
+      new WebLinksAddon((_event, uri) => {
+        if (/^https?:\/\//i.test(uri)) void openUrl(uri);
+      })
+    );
     term.open(element);
     try {
       // GPU renderer; falls back to the DOM renderer if WebGL is unavailable.
@@ -118,18 +125,33 @@ class TerminalManager {
 
     const channel = new Channel<PtyEvent>();
     channel.onmessage = (msg) => {
+      // The pane may have been disposed while the event was in flight.
+      if (this.panes.get(paneId) !== pane) return;
       if (msg.type === "data") pane.term.write(base64ToBytes(msg.data));
       else if (msg.type === "exit") this.onExit?.(paneId);
     };
 
     try {
-      pane.ptyId = await invoke<number>("pty_spawn", {
+      const id = await invoke<number>("pty_spawn", {
         cwd: cwd ?? null,
         shell: null,
         cols,
         rows,
         onEvent: channel,
       });
+      if (this.panes.get(paneId) !== pane) {
+        // Pane closed while the spawn was in flight — reap the orphan shell,
+        // or it would run invisibly until the app exits.
+        invoke("pty_kill", { id });
+        return;
+      }
+      pane.ptyId = id;
+    } catch (e) {
+      // Show the failure in the pane itself; a silently blank terminal with an
+      // unhandled rejection gives the user nothing to act on.
+      if (this.panes.get(paneId) === pane) {
+        pane.term.writeln(`\x1b[31mFailed to start shell: ${e}\x1b[0m`);
+      }
     } finally {
       pane.spawning = false;
     }

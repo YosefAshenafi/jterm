@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
+import { trackPointerDrag } from "../drag";
 import { ActivityBar } from "./ActivityBar";
 import { ExplorerPanel } from "./ExplorerPanel";
 import { SearchPanel } from "./SearchPanel";
@@ -10,19 +11,23 @@ import { GitPanel } from "./GitPanel";
 export function Sidebar() {
   const { sidebarView } = useStore();
   const [width, setWidth] = useState(272);
+  const cleanupRef = useRef<(() => void) | null>(null);
+
+  // Tear down a live resize drag if the sidebar unmounts mid-drag so its
+  // window listeners don't leak.
+  useEffect(() => () => cleanupRef.current?.(), []);
 
   const startResize = (e: React.PointerEvent) => {
     e.preventDefault();
     const startX = e.clientX;
     const startW = width;
-    const onMove = (ev: PointerEvent) =>
-      setWidth(Math.min(560, Math.max(180, startW + ev.clientX - startX)));
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    cleanupRef.current = trackPointerDrag(
+      e,
+      (ev) => setWidth(Math.min(560, Math.max(180, startW + ev.clientX - startX))),
+      () => {
+        cleanupRef.current = null;
+      }
+    );
   };
 
   return (
