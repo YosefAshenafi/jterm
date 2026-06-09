@@ -79,7 +79,11 @@ export default function App() {
         fn();
       };
 
-      // Sidebar views work from anywhere (⌘⇧F search, ⌘⇧G source control).
+      // Sidebar views work from anywhere (⌘B explorer toggle, ⌘⇧F search, ⌘⇧G source control).
+      if (k === "b" && !e.shiftKey) return run(() => {
+        if (store.sidebarOpen && store.sidebarView === "explorer") store.toggleSidebar();
+        else store.openSidebarView("explorer");
+      });
       if (k === "f" && e.shiftKey) return run(() => store.openSidebarView("search"));
       if (k === "g" && e.shiftKey) return run(() => store.openSidebarView("git"));
 
@@ -154,7 +158,9 @@ export default function App() {
 
   return (
     <div className="app">
-      <TabBar />
+      <div className="titlebar" data-tauri-drag-region>
+        <TabBar />
+      </div>
       <Toolbar />
       <div className="main">
         {store.sidebarOpen && <Sidebar />}

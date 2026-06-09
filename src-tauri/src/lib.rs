@@ -611,6 +611,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(PtyManager::default())
         .manage(SearchState::default())
+        // Remove the default macOS application menu so system accelerators
+        // (Cmd+M minimize, Cmd+D bookmark, Cmd+H hide, etc.) don't swallow
+        // keystrokes before the webview can handle them.
+        .menu(|_handle| tauri::menu::Menu::new(_handle))
         .invoke_handler(tauri::generate_handler![
             pty_spawn,
             pty_write,

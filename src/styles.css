@@ -93,15 +93,24 @@ body {
   }
 }
 
-/* ---- Tab bar ---- */
-.tabbar {
+/* ---- Title bar (houses the tab strip, sits in the macOS overlay zone) ---- */
+.titlebar {
   display: flex;
   align-items: stretch;
   height: 38px;
   background: var(--bg-tab);
   border-bottom: 1px solid var(--border);
-  padding-left: 78px; /* clear the macOS traffic lights */
   flex: 0 0 auto;
+  /* Allow the entire bar to drag the window — child buttons opt out. */
+}
+
+/* ---- Tab bar ---- */
+.tabbar {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: 78px; /* clear the macOS traffic lights */
 }
 
 .tabs {
