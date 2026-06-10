@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../state/store";
-import { basename, dirname } from "../workspace";
+import { basename, dirname, resolveCwd } from "../workspace";
 import { ArrowUpIcon, CheckIcon, MinusIcon, PlusIcon, SyncIcon } from "./icons";
 
 interface GitFile {
@@ -88,7 +88,9 @@ function FileRow({
 
 /** Source Control: branch, staged/unstaged changes, commit message + push. */
 export function GitPanel() {
-  const { projectRoot, openFile } = useStore();
+  const { activePaneId, openFile } = useStore();
+  /** Directory the shown status was resolved from (the active shell's cwd). */
+  const [dir, setDir] = useState<string | null>(null);
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,18 +99,19 @@ export function GitPanel() {
   const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
-    if (!projectRoot) {
-      setStatus(null);
-      return;
-    }
     // Sequence guard (same role as the `alive` flags in ExplorerPanel/SearchPanel):
-    // projectRoot changes with live-debounced path edits, and a slow git_status on a
-    // big repo can resolve after a newer one — only the latest request may win.
+    // a slow git_status on a big repo can resolve after a newer one — only the
+    // latest request may win.
     const seq = ++seqRef.current;
     setLoading(true);
     try {
-      const next = await invoke<GitStatus>("git_status", { path: projectRoot });
+      // The panel always mirrors where the active terminal's shell is *right
+      // now* — never a folder captured earlier. git_status itself walks up to
+      // the repository root, so any subdirectory of a repo works.
+      const path = await resolveCwd(activePaneId);
+      const next = await invoke<GitStatus>("git_status", { path });
       if (seq !== seqRef.current) return;
+      setDir(path);
       setStatus(next);
       setError(null);
     } catch (e) {
@@ -117,10 +120,15 @@ export function GitPanel() {
     } finally {
       if (seq === seqRef.current) setLoading(false);
     }
-  }, [projectRoot]);
+  }, [activePaneId]);
 
+  // Refresh when the panel opens or another pane takes focus, then keep
+  // polling while visible so a `cd` in the shell (or an outside commit)
+  // shows up on its own. Porcelain status on a local repo is cheap.
   useEffect(() => {
     refresh();
+    const timer = setInterval(refresh, 4000);
+    return () => clearInterval(timer);
   }, [refresh]);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -136,12 +144,12 @@ export function GitPanel() {
     }
   };
 
-  const root = status?.root ?? projectRoot ?? "";
+  const root = status?.is_repo ? status.root : dir ?? "";
   const stage = (file: string) => run(() => invoke("git_stage", { path: root, file }));
   const unstage = (file: string) => run(() => invoke("git_unstage", { path: root, file }));
   const stageAll = () => run(() => invoke("git_stage_all", { path: root }));
   const push = () => run(() => invoke("git_push", { path: root }));
-  const init = () => run(() => invoke("git_init", { path: projectRoot }));
+  const init = () => run(() => invoke("git_init", { path: dir }));
   const commit = () =>
     run(async () => {
       await invoke("git_commit", { path: root, message });
@@ -154,10 +162,11 @@ export function GitPanel() {
   const changes = (status?.files ?? []).filter((f) => f.y !== " ");
   const canCommit = staged.length > 0 && message.trim().length > 0 && !busy;
   // With a clean tree there's nothing left to commit, so the big button becomes
-  // Push — the one action that still makes sense. No upstream counts as
-  // pushable (publishing the branch); already-pushed disables it.
+  // the next action that makes sense (VS Code-style): "Publish Branch" with no
+  // upstream, "Push (n)" with commits ahead, and a passive "Up to date" check
+  // once everything is pushed.
   const treeClean = status != null && status.files.length === 0;
-  const canPush = !busy && status != null && (status.ahead > 0 || !status.upstream);
+  const synced = status != null && !!status.upstream && status.ahead === 0;
 
   return (
     <div className="panel">
@@ -178,26 +187,37 @@ export function GitPanel() {
       </div>
 
       <div className="panel-body git-body">
-        {!projectRoot ? (
-          <div className="tree-note">Open a folder to use Source Control</div>
-        ) : loading && !status ? (
+        {loading && !status ? (
           <div className="tree-note">Loading…</div>
         ) : status && !status.is_repo ? (
           <div className="git-empty">
-            <p>This folder is not a Git repository.</p>
-            <button className="btn btn-primary" disabled={busy} onPointerDown={preserveFocus} onClick={init}>
+            <p>
+              Not a Git repository:
+              <br />
+              <span className="git-empty-path">{dir}</span>
+            </p>
+            <button className="btn btn-primary" disabled={busy || !dir} onPointerDown={preserveFocus} onClick={init}>
               Initialize Repository
             </button>
           </div>
         ) : status ? (
           <>
             <div className="git-branch">
+              <span className="git-repo" title={status.root}>
+                {basename(status.root)}
+              </span>
               <GitBranchLabel branch={status.branch} />
               <button
                 className="git-push"
-                title={status.upstream ? `Push to ${status.upstream}` : "Push"}
+                title={
+                  synced
+                    ? "Everything is pushed"
+                    : status.upstream
+                      ? `Push to ${status.upstream}`
+                      : "Publish the current branch"
+                }
                 aria-label="Push"
-                disabled={busy}
+                disabled={busy || synced}
                 onPointerDown={preserveFocus}
                 onClick={push}
               >
@@ -221,22 +241,29 @@ export function GitPanel() {
                   e.stopPropagation();
                 }}
               />
-              {treeClean ? (
+              {treeClean && synced ? (
+                <button
+                  className="btn btn-primary git-commit-btn git-uptodate"
+                  title={`Everything is pushed to ${status.upstream}`}
+                  disabled
+                  onPointerDown={preserveFocus}
+                >
+                  <CheckIcon /> Up to date
+                </button>
+              ) : treeClean ? (
                 <button
                   className="btn btn-primary git-commit-btn"
                   title={
-                    !canPush && !busy
-                      ? "Nothing to push"
-                      : status.upstream
-                        ? `Push to ${status.upstream}`
-                        : "Push"
+                    status.upstream
+                      ? `Push to ${status.upstream}`
+                      : "Publish the current branch to its remote"
                   }
-                  disabled={!canPush}
+                  disabled={busy}
                   onPointerDown={preserveFocus}
                   onClick={push}
                 >
-                  <ArrowUpIcon /> Push
-                  {status.ahead > 0 ? ` (${status.ahead})` : ""}
+                  <ArrowUpIcon />{" "}
+                  {status.upstream ? `Push (${status.ahead})` : "Publish Branch"}
                 </button>
               ) : (
                 <button
