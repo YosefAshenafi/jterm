@@ -39,6 +39,10 @@ export async function resolveCwd(paneId: string | null): Promise<string> {
       const cwd = await invoke<string | null>("pane_cwd", { id: ptyId });
       if (cwd) return cwd;
     }
+    // The pane's shell hasn't spawned yet (e.g. splitting a pane that was
+    // itself just split) — inherit the directory it is about to start in.
+    const pending = terminals.getSpawnCwd(paneId);
+    if (pending) return pending;
   }
   return homeDir();
 }

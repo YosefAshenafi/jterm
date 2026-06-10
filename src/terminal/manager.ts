@@ -35,6 +35,9 @@ function base64ToBytes(b64: string): Uint8Array {
 
 class TerminalManager {
   private panes = new Map<string, PaneTerminal>();
+  /** Start directories pre-assigned to panes that haven't spawned yet — a
+   * split hands the source pane's cwd to its new sibling through here. */
+  private spawnCwd = new Map<string, Promise<string>>();
   /** User prefs applied to every terminal (see settings store). The accent
    * doubles as the cursor color so it tracks the UI border color. */
   private prefs = { fontSize: FONT_SIZE, cursorBlink: true, accent: DEFAULT_THEME.cursor! };
@@ -113,11 +116,32 @@ class TerminalManager {
     this.fit(paneId);
   }
 
+  /** Pre-assign the directory a not-yet-spawned pane's shell starts in. */
+  setSpawnCwd(paneId: string, cwd: Promise<string>): void {
+    this.spawnCwd.set(paneId, cwd);
+  }
+
+  /** Pending pre-assigned start directory for a pane that hasn't spawned. */
+  getSpawnCwd(paneId: string): Promise<string> | undefined {
+    return this.spawnCwd.get(paneId);
+  }
+
   /** Spawn the shell for a pane if it doesn't have one yet. */
   async spawn(paneId: string, cwd?: string): Promise<void> {
     const pane = this.ensure(paneId);
     if (pane.ptyId != null || pane.spawning) return;
     pane.spawning = true;
+
+    // A split pre-assigns this pane's directory (the source pane's cwd); the
+    // lookup may still be in flight, so wait for it before starting the shell.
+    const pending = this.spawnCwd.get(paneId);
+    if (cwd == null && pending) {
+      try {
+        cwd = await pending;
+      } catch {
+        /* lookup failed — spawn in the default directory */
+      }
+    }
 
     this.fit(paneId);
     const cols = pane.term.cols;
@@ -153,6 +177,7 @@ class TerminalManager {
         pane.term.writeln(`\x1b[31mFailed to start shell: ${e}\x1b[0m`);
       }
     } finally {
+      this.spawnCwd.delete(paneId);
       pane.spawning = false;
     }
   }
@@ -213,6 +238,7 @@ class TerminalManager {
   }
 
   private dispose(paneId: string): void {
+    this.spawnCwd.delete(paneId);
     const pane = this.panes.get(paneId);
     if (!pane) return;
     if (pane.ptyId != null) invoke("pty_kill", { id: pane.ptyId });

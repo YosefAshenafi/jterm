@@ -38,6 +38,14 @@ describe("splitPane", () => {
     const { root } = splitPane(leaf, "nope", "row");
     expect(root).toBe(leaf);
   });
+
+  it("uses a pre-made leaf when one is provided", () => {
+    const target = makeLeaf();
+    const sibling = makeLeaf();
+    const { root, newLeafId } = splitPane(target, target.id, "column", sibling);
+    expect(newLeafId).toBe(sibling.id);
+    expect((root as SplitNode).children[1]).toBe(sibling);
+  });
 });
 
 describe("removePane", () => {
