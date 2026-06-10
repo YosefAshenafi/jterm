@@ -1,7 +1,8 @@
-import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../state/store";
 import { basename, dirname } from "../workspace";
+import { highlight } from "./highlight";
 import { ChevronIcon, CollapseAllIcon, SearchIcon } from "./icons";
 
 interface SearchMatch {
@@ -16,28 +17,6 @@ interface FileResult {
 interface SearchResults {
   results: FileResult[];
   truncated: boolean;
-}
-
-/** Wrap case-insensitive occurrences of `query` in <mark> for the result row. */
-function highlight(text: string, query: string): ReactNode {
-  const q = query.toLowerCase();
-  const lower = text.toLowerCase();
-  const out: ReactNode[] = [];
-  let i = 0;
-  let n = 0;
-  let idx = lower.indexOf(q, i);
-  while (idx !== -1) {
-    if (idx > i) out.push(text.slice(i, idx));
-    out.push(
-      <mark key={n++} className="search-hit">
-        {text.slice(idx, idx + q.length)}
-      </mark>
-    );
-    i = idx + q.length;
-    idx = lower.indexOf(q, i);
-  }
-  out.push(text.slice(i));
-  return out;
 }
 
 /** Full-text search across the project folder (⌘⇧F). Debounced; results group

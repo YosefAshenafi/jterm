@@ -573,6 +573,22 @@ body {
   gap: 8px;
   padding: 8px 10px;
 }
+/* Repository name (hover shows the full root path) so it's always clear which
+   repo the panel reflects. */
+.git-repo {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.git-empty-path {
+  color: var(--text);
+  word-break: break-all;
+}
 .git-branch-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -637,6 +653,14 @@ body {
 }
 .git-commit-btn:disabled {
   opacity: 0.5;
+}
+/* Passive "everything pushed" state — a quiet outline, not a faded accent
+   button that looks broken. */
+.git-commit-btn.git-uptodate:disabled {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-dim);
+  opacity: 1;
 }
 .git-commit-btn svg {
   width: 14px;
