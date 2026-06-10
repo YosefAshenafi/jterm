@@ -173,6 +173,8 @@ export function EditorArea() {
           <div className="editor-note">Loading…</div>
         ) : active.saved === null ? (
           <div className="editor-note editor-error">⚠ {active.error}</div>
+        ) : active.diff ? (
+          <GitDiffView content={active.draft} />
         ) : (
           <>
             {active.error ? <div className="editor-banner">⚠ {active.error}</div> : null}
@@ -215,6 +217,41 @@ export function EditorArea() {
         role="separator"
         aria-orientation="vertical"
       />
+    </div>
+  );
+}
+
+function GitDiffView({ content }: { content: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const syncRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => { syncRef.current?.(); }, []);
+
+  const lines = useMemo(() => {
+    const result: { kind: string; prefix: string; text: string }[] = [];
+    for (const line of content.split("\n")) {
+      if (line.startsWith("+") && !line.startsWith("+++")) {
+        result.push({ kind: "add", prefix: "+", text: line.slice(1) });
+      } else if (line.startsWith("-") && !line.startsWith("---")) {
+        result.push({ kind: "del", prefix: "-", text: line.slice(1) });
+      } else if (line.startsWith("@@")) {
+        result.push({ kind: "hdr", prefix: "@@", text: line.slice(2).trim() });
+      } else {
+        result.push({ kind: "ctx", prefix: " ", text: line });
+      }
+    }
+    return result;
+  }, [content]);
+
+  return (
+    <div className="editor-diff" ref={scrollRef}>
+      <div className="git-diff">
+        {lines.map((l, i) => (
+          <div key={i} className={`git-diff-line git-diff-${l.kind}`}>
+            <span className="git-diff-prefix">{l.prefix}</span>
+            <span className="git-diff-text">{l.text}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

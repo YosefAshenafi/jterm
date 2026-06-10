@@ -12,7 +12,7 @@ const ITEMS: { view: SidebarView; label: string; icon: ReactNode }[] = [
 /** Vertical icon rail that switches the sidebar between Explorer / Search /
  * Source Control. Re-clicking the search icon refocuses its input. */
 export function ActivityBar() {
-  const { sidebarView, openSidebarView } = useStore();
+  const { sidebarView, openSidebarView, gitChangesCount } = useStore();
   return (
     <div className="activity-bar">
       {ITEMS.map((it) => (
@@ -22,13 +22,13 @@ export function ActivityBar() {
           title={it.label}
           aria-label={it.label}
           aria-pressed={sidebarView === it.view}
-          // preventDefault on pointerdown keeps focus in the terminal; the
-          // action runs on click so keyboard activation works and right/middle
-          // clicks are ignored.
           onPointerDown={(e) => e.preventDefault()}
           onClick={() => openSidebarView(it.view)}
         >
           {it.icon}
+          {it.view === "git" && gitChangesCount > 0 && (
+            <span className="activity-badge">{gitChangesCount}</span>
+          )}
         </button>
       ))}
     </div>

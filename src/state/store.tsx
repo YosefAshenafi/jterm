@@ -219,6 +219,11 @@ interface StoreApi {
   setFocusRegion(region: FocusRegion): void;
   /** Open a file in the editor; pass `line` (1-based) to reveal/select it. */
   openFile(path: string, line?: number): void;
+  /** Open a diff view for a git file. */
+  openDiffView(path: string, content: string): void;
+  /** Number of changed files shown as a badge on the git icon. */
+  gitChangesCount: number;
+  setGitChangesCount(n: number): void;
   /** A pending line to reveal once its file is loaded (consumed by the editor). */
   reveal: RevealTarget | null;
   clearReveal(): void;
@@ -244,6 +249,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [editor, editorDispatch] = useReducer(editorReducer, emptyEditor);
   const [focusRegion, setFocusRegion] = useState<FocusRegion>("terminal");
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [gitChangesCount, setGitChangesCount] = useState(0);
 
   // Apply settings to the document (CSS variables) and live terminals, and
   // persist them. Runs on mount so a saved accent/font is restored at startup.
@@ -327,6 +333,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       editor,
       focusRegion,
       setFocusRegion,
+      openDiffView: (path, content) => {
+        editorDispatch({ type: "open-diff", path, name: basename(path), content });
+        setFocusRegion("editor");
+      },
+      gitChangesCount,
+      setGitChangesCount,
       openFile: (path, line) => {
         editorDispatch({ type: "open", path, name: basename(path) });
         setFocusRegion("editor");
@@ -387,6 +399,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       editor,
       focusRegion,
       settings,
+      gitChangesCount,
+      setGitChangesCount,
     ]
   );
 

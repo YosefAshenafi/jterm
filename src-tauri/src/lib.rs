@@ -5,6 +5,7 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::ipc::Channel;
+use tauri::menu::{Menu, PredefinedMenuItem, SubmenuBuilder};
 use tauri::State;
 
 /// One entry in a directory listing for the file-tree sidebar.
@@ -107,6 +108,35 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
             let _ = std::fs::remove_file(&tmp);
         }
         result
+    })
+    .await
+}
+
+/// Save a photo/screenshot from the clipboard to a temp PNG so its path can be
+/// pasted into the shell. Returns `None` when the clipboard holds no image.
+#[tauri::command]
+async fn save_clipboard_image(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let image = match app.clipboard().read_image() {
+        Ok(img) => img,
+        Err(_) => return Ok(None), // no image on the clipboard
+    };
+    let (width, height) = (image.width(), image.height());
+    let rgba = image.rgba().to_vec();
+    blocking(move || {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|e| e.to_string())?
+            .as_millis();
+        let path = std::env::temp_dir().join(format!("jterm-paste-{stamp}.png"));
+        let file = std::fs::File::create(&path).map_err(|e| e.to_string())?;
+        let mut encoder = png::Encoder::new(std::io::BufWriter::new(file), width, height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+        writer.write_image_data(&rgba).map_err(|e| e.to_string())?;
+        writer.finish().map_err(|e| e.to_string())?;
+        Ok(Some(path.to_string_lossy().into_owned()))
     })
     .await
 }
@@ -554,6 +584,34 @@ async fn git_push(path: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn git_discard(path: String, file: String) -> Result<(), String> {
+    blocking(move || {
+        // First try git checkout -- <file> (handles modified/deleted tracked files)
+        match run_git(&path, &["checkout", "--", &file]) {
+            Ok(_) => Ok(()),
+            Err(_) => {
+                // Untracked file — delete from disk
+                let full = std::path::Path::new(&path).join(&file);
+                std::fs::remove_file(&full).map_err(|e| format!("failed to discard: {e}"))
+            }
+        }
+    })
+    .await
+}
+
+#[tauri::command]
+async fn git_diff(path: String, file: String, staged: bool) -> Result<String, String> {
+    blocking(move || {
+        if staged {
+            run_git(&path, &["diff", "--staged", "--no-color", "--", &file])
+        } else {
+            run_git(&path, &["diff", "--no-color", "--", &file])
+        }
+    })
+    .await
+}
+
+#[tauri::command]
 async fn git_init(path: String) -> Result<String, String> {
     blocking(move || run_git(&path, &["init"])).await
 }
@@ -610,10 +668,18 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(PtyManager::default())
         .manage(SearchState::default())
-        // Remove the default macOS application menu so system accelerators
-        // (Cmd+M minimize, Cmd+D bookmark, Cmd+H hide, etc.) don't swallow
-        // keystrokes before the webview can handle them.
-        .menu(|_handle| tauri::menu::Menu::new(_handle))
+        // Remove most of the default macOS menu to prevent system accelerators
+        // (Cmd+M minimize, Cmd+D bookmark, Cmd+H hide, etc.) from swallowing
+        // keystrokes before the webview can handle them. Keep the app submenu
+        // with Quit so Cmd+Q still closes the application.
+        .menu(|handle| {
+            let quit = PredefinedMenuItem::quit(handle, Some("Quit jterm"))?;
+            let app_menu = SubmenuBuilder::new(handle, "jterm")
+                .item(&quit)
+                .build()?;
+            let menu = Menu::with_items(handle, &[&app_menu])?;
+            Ok(menu)
+        })
         .invoke_handler(tauri::generate_handler![
             pty_spawn,
             pty_write,
@@ -623,11 +689,14 @@ pub fn run() {
             read_file,
             write_file,
             pane_cwd,
+            save_clipboard_image,
             search_in_folder,
             git_status,
             git_stage,
             git_stage_all,
             git_unstage,
+            git_discard,
+            git_diff,
             git_commit,
             git_push,
             git_init
