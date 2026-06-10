@@ -163,11 +163,10 @@ body {
   background: transparent;
   color: var(--text);
   border: none;
-  border-bottom: 1px solid var(--accent);
-  border-radius: 0;
   padding: 1px 0;
   font: inherit;
   outline: none;
+  /* No underline or other chrome — the auto-selected text is the edit cue. */
 }
 
 .tab-close,

@@ -19,13 +19,15 @@ export function collectLeaves(node: PaneNode): LeafNode[] {
   return [...collectLeaves(node.children[0]), ...collectLeaves(node.children[1])];
 }
 
-/** Split `targetId` into itself + a fresh sibling leaf. */
+/** Split `targetId` into itself + a sibling leaf. Callers that need the new
+ * pane's id before dispatching (e.g. to pre-assign its working directory) can
+ * pass a pre-made leaf. */
 export function splitPane(
   root: PaneNode,
   targetId: string,
-  direction: Direction
+  direction: Direction,
+  newLeaf: LeafNode = makeLeaf()
 ): { root: PaneNode; newLeafId: string } {
-  const newLeaf = makeLeaf();
 
   const rec = (node: PaneNode): PaneNode => {
     if (node.type === "leaf") {

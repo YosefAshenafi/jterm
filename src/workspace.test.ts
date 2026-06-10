@@ -4,7 +4,13 @@ import { describe, expect, it, vi } from "vitest";
 // resolveCwd; stub those imports so the pure path helpers test in isolation.
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/path", () => ({ homeDir: vi.fn(async () => "/home/user") }));
-vi.mock("./terminal/manager", () => ({ terminals: { getPtyId: () => null } }));
+vi.mock("./terminal/manager", () => ({
+  terminals: {
+    getPtyId: () => null,
+    getSpawnCwd: (paneId: string) =>
+      paneId === "pane-pending" ? Promise.resolve("/inherited/dir") : undefined,
+  },
+}));
 
 import { basename, dirname, resolveCwd, shellQuote } from "./workspace";
 
@@ -58,5 +64,9 @@ describe("resolveCwd", () => {
 
   it("falls back to home when the pane has no PTY yet", async () => {
     expect(await resolveCwd("pane-1")).toBe("/home/user");
+  });
+
+  it("inherits a pending spawn directory for a pane that hasn't spawned", async () => {
+    expect(await resolveCwd("pane-pending")).toBe("/inherited/dir");
   });
 });

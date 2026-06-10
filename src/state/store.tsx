@@ -19,7 +19,7 @@ import {
   saveSettings,
   Settings,
 } from "./settings";
-import { AppState, Direction, Tab } from "./types";
+import { AppState, Direction, LeafNode, Tab } from "./types";
 import {
   collectLeaves,
   firstLeaf,
@@ -60,7 +60,7 @@ type Action =
   | { type: "close-tab"; tabId: string }
   | { type: "select-tab"; tabId: string }
   | { type: "select-tab-index"; index: number }
-  | { type: "split"; direction: Direction }
+  | { type: "split"; direction: Direction; leaf?: LeafNode }
   | { type: "close-pane"; tabId: string; paneId: string }
   | { type: "focus-pane"; tabId: string; paneId: string }
   | { type: "toggle-zoom"; tabId: string; paneId: string }
@@ -111,7 +111,12 @@ function reducer(state: AppState, action: Action): AppState {
     case "split": {
       const tab = activeTab(state);
       if (!tab) return state;
-      const { root, newLeafId } = splitPane(tab.root, tab.activePaneId, action.direction);
+      const { root, newLeafId } = splitPane(
+        tab.root,
+        tab.activePaneId,
+        action.direction,
+        action.leaf
+      );
       // A new split should be visible, so leave any zoom.
       return updateTab(state, tab.id, { root, activePaneId: newLeafId, zoomedPaneId: null });
     }
@@ -280,7 +285,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       closeTab: (tabId) => dispatch({ type: "close-tab", tabId }),
       selectTab: (tabId) => dispatch({ type: "select-tab", tabId }),
       selectTabIndex: (index) => dispatch({ type: "select-tab-index", index }),
-      split: (direction) => dispatch({ type: "split", direction }),
+      split: (direction) => {
+        const tab = state.tabs.find((t) => t.id === state.activeTabId);
+        if (!tab) return;
+        // The new pane's shell starts in the split source's working directory.
+        // The leaf is made here (not in the reducer) so its cwd can be handed
+        // to the terminal manager before the pane mounts and spawns.
+        const leaf = makeLeaf();
+        terminals.setSpawnCwd(leaf.id, resolveCwd(tab.activePaneId));
+        dispatch({ type: "split", direction, leaf });
+      },
       closePane: (tabId, paneId) => dispatch({ type: "close-pane", tabId, paneId }),
       closeActivePane: () => {
         const tab = state.tabs.find((t) => t.id === state.activeTabId);
