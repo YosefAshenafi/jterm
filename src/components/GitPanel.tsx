@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPoi
 import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../state/store";
 import { basename, dirname, resolveCwd } from "../workspace";
-import { ArrowUpIcon, CheckIcon, MinusIcon, PlusIcon, SyncIcon } from "./icons";
+import { ArrowUpIcon, CheckIcon, DiscardIcon, MinusIcon, PlusIcon, SyncIcon } from "./icons";
 
 interface GitFile {
   path: string;
@@ -37,14 +37,10 @@ function StatusBadge({ code }: { code: string }) {
   );
 }
 
-// Buttons act on click so they stay keyboard-operable (and ignore right/middle
-// presses); pointerdown is only suppressed so clicking never steals focus from
-// the terminal.
 const preserveFocus = (e: ReactPointerEvent) => e.preventDefault();
 
-// Module scope so the row keeps a stable component identity — defined inside
-// GitPanel it would remount every row (dropping focus/hover) on each
-// commit-message keystroke.
+// ── File Row ────────────────────────────────────────────────
+
 function FileRow({
   file,
   code,
@@ -52,13 +48,15 @@ function FileRow({
   busy,
   onOpen,
   onAction,
+  onDiscard,
 }: {
   file: GitFile;
   code: string;
   staged: boolean;
   busy: boolean;
-  onOpen: (file: string) => void;
+  onOpen: (file: string, staged: boolean) => void;
   onAction: (file: string) => void;
+  onDiscard: (file: string) => void;
 }) {
   return (
     <div className="git-row">
@@ -66,11 +64,23 @@ function FileRow({
         className="git-row-main"
         title={file.path}
         onPointerDown={preserveFocus}
-        onClick={() => onOpen(file.path)}
+        onClick={() => onOpen(file.path, staged)}
       >
         <span className="git-row-name">{basename(file.path)}</span>
         <span className="git-row-dir">{dirname(file.path)}</span>
       </button>
+      {!staged && (
+        <button
+          className="git-row-action git-row-discard"
+          title="Discard changes"
+          aria-label={`Discard changes in ${file.path}`}
+          disabled={busy}
+          onPointerDown={preserveFocus}
+          onClick={() => onDiscard(file.path)}
+        >
+          <DiscardIcon />
+        </button>
+      )}
       <button
         className="git-row-action"
         title={staged ? "Unstage" : "Stage"}
@@ -86,10 +96,11 @@ function FileRow({
   );
 }
 
+// ── Panel ───────────────────────────────────────────────────
+
 /** Source Control: branch, staged/unstaged changes, commit message + push. */
 export function GitPanel() {
-  const { activePaneId, openFile } = useStore();
-  /** Directory the shown status was resolved from (the active shell's cwd). */
+  const { activePaneId, openDiffView, setGitChangesCount } = useStore();
   const [dir, setDir] = useState<string | null>(null);
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -99,20 +110,15 @@ export function GitPanel() {
   const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
-    // Sequence guard (same role as the `alive` flags in ExplorerPanel/SearchPanel):
-    // a slow git_status on a big repo can resolve after a newer one — only the
-    // latest request may win.
     const seq = ++seqRef.current;
     setLoading(true);
     try {
-      // The panel always mirrors where the active terminal's shell is *right
-      // now* — never a folder captured earlier. git_status itself walks up to
-      // the repository root, so any subdirectory of a repo works.
       const path = await resolveCwd(activePaneId);
       const next = await invoke<GitStatus>("git_status", { path });
       if (seq !== seqRef.current) return;
       setDir(path);
       setStatus(next);
+      setGitChangesCount(next.files.length);
       setError(null);
     } catch (e) {
       if (seq !== seqRef.current) return;
@@ -120,11 +126,8 @@ export function GitPanel() {
     } finally {
       if (seq === seqRef.current) setLoading(false);
     }
-  }, [activePaneId]);
+  }, [activePaneId, setGitChangesCount]);
 
-  // Refresh when the panel opens or another pane takes focus, then keep
-  // polling while visible so a `cd` in the shell (or an outside commit)
-  // shows up on its own. Porcelain status on a local repo is cheap.
   useEffect(() => {
     refresh();
     const timer = setInterval(refresh, 4000);
@@ -147,6 +150,11 @@ export function GitPanel() {
   const root = status?.is_repo ? status.root : dir ?? "";
   const stage = (file: string) => run(() => invoke("git_stage", { path: root, file }));
   const unstage = (file: string) => run(() => invoke("git_unstage", { path: root, file }));
+  const discard = (file: string) => {
+    if (window.confirm(`Discard changes in "${file}"?`)) {
+      run(() => invoke("git_discard", { path: root, file }));
+    }
+  };
   const stageAll = () => run(() => invoke("git_stage_all", { path: root }));
   const push = () => run(() => invoke("git_push", { path: root }));
   const init = () => run(() => invoke("git_init", { path: dir }));
@@ -156,15 +164,28 @@ export function GitPanel() {
       setMessage("");
     });
 
-  const open = (file: string) => openFile(`${root}/${file}`);
+  const openDiff = async (file: string, staged: boolean) => {
+    try {
+      const fullPath = `${root}/${file}`;
+      const diff = await invoke<string>("git_diff", { path: root, file, staged });
+      if (diff.trim()) {
+        openDiffView(fullPath, diff);
+      } else if (!staged) {
+        // Untracked file — show content as all additions
+        const content = await invoke<string>("read_file", { path: fullPath });
+        const asDiff = content.split("\n").map((l) => `+${l}`).join("\n");
+        openDiffView(fullPath, asDiff);
+      } else {
+        openDiffView(fullPath, diff);
+      }
+    } catch {
+      // Fallback: open normally
+    }
+  };
 
   const staged = (status?.files ?? []).filter((f) => f.x !== " " && f.x !== "?");
   const changes = (status?.files ?? []).filter((f) => f.y !== " ");
   const canCommit = staged.length > 0 && message.trim().length > 0 && !busy;
-  // With a clean tree there's nothing left to commit, so the big button becomes
-  // the next action that makes sense (VS Code-style): "Publish Branch" with no
-  // upstream, "Push (n)" with commits ahead, and a passive "Up to date" check
-  // once everything is pushed.
   const treeClean = status != null && status.files.length === 0;
   const synced = status != null && !!status.upstream && status.ahead === 0;
 
@@ -236,7 +257,6 @@ export function GitPanel() {
                 rows={2}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => {
-                  // ⌘/Ctrl+Enter commits.
                   if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canCommit) commit();
                   e.stopPropagation();
                 }}
@@ -286,7 +306,7 @@ export function GitPanel() {
                   <span className="git-section-count">{staged.length}</span>
                 </div>
                 {staged.map((f) => (
-                  <FileRow key={`s:${f.path}`} file={f} code={f.x} staged busy={busy} onOpen={open} onAction={unstage} />
+                  <FileRow key={`s:${f.path}`} file={f} code={f.x} staged busy={busy} onOpen={openDiff} onAction={unstage} onDiscard={() => {}} />
                 ))}
               </div>
             )}
@@ -318,8 +338,9 @@ export function GitPanel() {
                     code={f.x === "?" ? "?" : f.y}
                     staged={false}
                     busy={busy}
-                    onOpen={open}
+                    onOpen={openDiff}
                     onAction={stage}
+                    onDiscard={discard}
                   />
                 ))
               )}

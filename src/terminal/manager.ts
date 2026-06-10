@@ -14,6 +14,7 @@ import {
 } from "@tauri-apps/plugin-clipboard-manager";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import "@xterm/xterm/css/xterm.css";
+import { shellQuote } from "../shellquote";
 import { DEFAULT_THEME, FONT_FAMILY, FONT_SIZE } from "./theme";
 
 type PtyEvent = { type: "data"; data: string } | { type: "exit"; code: number };
@@ -105,6 +106,19 @@ class TerminalManager {
       if (pane.ptyId != null) invoke("pty_write", { id: pane.ptyId, data });
     });
     term.onTitleChange((title) => this.onTitle?.(paneId, title));
+
+    // Shift+Enter types a newline into the command instead of running it.
+    // ESC+CR is the sequence zsh inserts a literal newline for and that TUIs
+    // like Claude Code treat as "insert newline" (its /terminal-setup binding).
+    term.attachCustomKeyEventHandler((ev) => {
+      if (ev.key === "Enter" && ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
+        if (ev.type === "keydown" && pane.ptyId != null) {
+          invoke("pty_write", { id: pane.ptyId, data: "\x1b\r" });
+        }
+        return false; // suppress xterm's plain "\r" in every event phase
+      }
+      return true;
+    });
 
     return pane;
   }
@@ -226,8 +240,18 @@ class TerminalManager {
   async paste(paneId: string): Promise<void> {
     const pane = this.panes.get(paneId);
     if (!pane || pane.ptyId == null) return;
-    const text = await clipboardRead();
-    if (text) invoke("pty_write", { id: pane.ptyId, data: text });
+    // Text first — reading rejects when the clipboard holds none.
+    const text = await clipboardRead().catch(() => null);
+    if (text) {
+      invoke("pty_write", { id: pane.ptyId, data: text });
+      return;
+    }
+    // No text: a copied photo/screenshot is saved to a temp PNG and its quoted
+    // path is typed into the shell, ready to hand to a command or a TUI.
+    const path = await invoke<string | null>("save_clipboard_image").catch(() => null);
+    if (path && this.panes.get(paneId) === pane && pane.ptyId != null) {
+      invoke("pty_write", { id: pane.ptyId, data: `${shellQuote(path)} ` });
+    }
   }
 
   /** Dispose any terminals whose panes no longer exist in the layout. */

@@ -86,8 +86,8 @@ export const GitBranchIcon = (p: SVGProps<SVGSVGElement>) => (
 
 export const CollapseAllIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
-    <path d="M4.5 5 7 7l2.5-2" />
-    <path d="M4.5 11 7 9l2.5 2" />
+    <path d="M4.5 5 8 8.5 11.5 5" />
+    <path d="M4.5 9.5 8 13 11.5 9.5" />
   </svg>
 );
 
@@ -100,6 +100,12 @@ export const MinusIcon = (p: SVGProps<SVGSVGElement>) => (
 export const CheckIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M3.4 8.4 6.3 11.4 12.6 4.6" />
+  </svg>
+);
+
+export const DiscardIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M10.5 3.5 3.5 10.5M3.5 3.5l7 7" />
   </svg>
 );
 

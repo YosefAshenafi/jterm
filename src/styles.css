@@ -381,6 +381,23 @@ body {
   outline: none;
   box-shadow: 0 0 0 2px var(--accent);
 }
+.activity-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
 
 .side-panel {
   position: relative;
@@ -797,6 +814,62 @@ body {
   color: var(--text-dim);
 }
 
+/* Discard changes button — shows on hover, red tint. */
+.git-row-discard {
+  opacity: 0;
+}
+.git-row:hover .git-row-discard {
+  opacity: 1;
+}
+.git-row-discard:hover {
+  background: rgba(224, 108, 117, 0.2);
+  color: #e06c75;
+}
+
+.git-row-selected {
+  background: #1c2330;
+}
+
+/* ── Diff preview inside the git panel ── */
+.git-diff {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  background: #11161f;
+  border-top: 1px solid var(--border);
+  padding: 4px 0 4px 8px;
+  overflow-x: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.git-diff-line {
+  display: flex;
+  white-space: pre;
+  min-height: 16px;
+}
+.git-diff-prefix {
+  flex: 0 0 14px;
+  text-align: center;
+  user-select: none;
+}
+.git-diff-text {
+  flex: 1;
+}
+.git-diff-add {
+  background: rgba(152, 195, 121, 0.1);
+  color: #98c379;
+}
+.git-diff-del {
+  background: rgba(224, 108, 117, 0.1);
+  color: #e06c75;
+}
+.git-diff-hdr {
+  color: #61afef;
+}
+.git-diff-ctx {
+  color: var(--text-dim);
+}
+
 .tree-row {
   display: flex;
   align-items: center;
@@ -946,6 +1019,19 @@ body {
   flex-direction: column;
   overflow: hidden;
   background: var(--bg);
+}
+.editor-diff {
+  flex: 1;
+  overflow: auto;
+}
+/* Diff view inside the editor uses the same colour scheme as the inline
+   git diff, but spans the full editor width and scrolls independently. */
+.editor-diff .git-diff {
+  max-height: none;
+  min-height: 100%;
+  border-top: none;
+  padding: 8px 0 12px 12px;
+  font-size: 12px;
 }
 .editor-note {
   padding: 14px 16px;

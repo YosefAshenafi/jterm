@@ -13,6 +13,8 @@ export interface FileBuffer {
   loading: boolean;
   /** Load or save failure message, if any. */
   error: string | null;
+  /** True = render as a coloured diff view instead of a textarea. */
+  diff: boolean;
 }
 
 export interface EditorState {
@@ -25,6 +27,7 @@ export const emptyEditor: EditorState = { files: [], activePath: null };
 
 export type EditorAction =
   | { type: "open"; path: string; name: string }
+  | { type: "open-diff"; path: string; name: string; content: string }
   | { type: "loaded"; path: string; text: string }
   | { type: "edit"; path: string; draft: string }
   | { type: "saved"; path: string; text: string }
@@ -58,7 +61,29 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         draft: "",
         loading: true,
         error: null,
+        diff: false,
       };
+      return { files: [...state.files, file], activePath: action.path };
+    }
+    case "open-diff": {
+      const file: FileBuffer = {
+        path: action.path,
+        name: action.name,
+        saved: action.content,
+        draft: action.content,
+        loading: false,
+        error: null,
+        diff: true,
+      };
+      if (state.files.some((f) => f.path === action.path)) {
+        return {
+          ...state,
+          files: state.files.map((f) =>
+            f.path === action.path ? { ...file, diff: true, loading: false } : f
+          ),
+          activePath: action.path,
+        };
+      }
       return { files: [...state.files, file], activePath: action.path };
     }
     case "loaded":
@@ -67,9 +92,10 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         draft: action.text,
         loading: false,
         error: null,
+        diff: false,
       });
     case "edit":
-      return patch(state, action.path, { draft: action.draft, error: null });
+      return patch(state, action.path, { draft: action.draft, error: null, diff: false });
     case "saved":
       // `text` is the content that was actually written, captured before the
       // write. Stamping the *current* draft instead would mark keystrokes typed
