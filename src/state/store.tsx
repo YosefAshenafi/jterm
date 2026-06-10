@@ -12,7 +12,6 @@ import {
   useState,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { terminals } from "../terminal/manager";
 import {
   hexToRgba,
@@ -345,9 +344,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       requestCloseFile: async (path) => {
         const f = editor.files.find((x) => x.path === path);
         if (f && isDirty(f)) {
-          const discard = await ask(
-            `"${f.name}" has unsaved changes. Close without saving?`,
-            { title: "Unsaved changes", kind: "warning" }
+          const discard = window.confirm(
+            `"${f.name}" has unsaved changes. Close without saving?`
           );
           if (!discard) return;
         }

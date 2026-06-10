@@ -11,7 +11,6 @@
       "allow": [{ "url": "https://**" }, { "url": "http://**" }]
     },
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text",
-    "dialog:allow-ask"
+    "clipboard-manager:allow-write-text"
   ]
 }
