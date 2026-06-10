@@ -158,11 +158,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <div
-        className="titlebar"
-        data-tauri-drag-region
-        onDoubleClick={() => getCurrentWindow().toggleMaximize()}
-      >
+      {/* "deep" makes the whole bar a drag region (interactive children like
+          tabs/buttons are excluded automatically). Tauri's drag script also
+          toggles maximize — macOS zoom, not full screen — on double-click. */}
+      <div className="titlebar" data-tauri-drag-region="deep">
         <TabBar />
       </div>
       <Toolbar />

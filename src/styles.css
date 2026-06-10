@@ -101,7 +101,6 @@ body {
   background: var(--bg-tab);
   border-bottom: 1px solid var(--border);
   flex: 0 0 auto;
-  -webkit-app-region: drag; /* allow dragging the window from the title bar */
 }
 
 /* ---- Tab bar ---- */
@@ -135,7 +134,6 @@ body {
   font-size: 12.5px;
   cursor: default;
   position: relative;
-  -webkit-app-region: no-drag;
 }
 
 .tab-active {
@@ -204,7 +202,6 @@ body {
   align-self: center;
   height: 26px;
   margin-left: 4px;
-  -webkit-app-region: no-drag;
 }
 .tab-new:hover {
   background: #2a3340;
