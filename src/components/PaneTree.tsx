@@ -1,9 +1,10 @@
 import { CSSProperties, useEffect, useRef } from "react";
 import { Direction, PaneNode, Tab } from "../state/types";
 import { useStore } from "../state/store";
-import { collectLeaves } from "../state/tree";
+import { collectLeaves, firstLeaf } from "../state/tree";
 import { trackPointerDrag } from "../drag";
 import { TerminalPane } from "./TerminalPane";
+import { basename } from "../workspace";
 
 interface MenuRequest {
   x: number;
@@ -36,7 +37,8 @@ function PaneLeaf({
   canZoom: boolean;
   onPaneMenu: (req: MenuRequest) => void;
 }) {
-  const { focusPane, closePane, toggleZoom } = useStore();
+  const { focusPane, closePane, toggleZoom, setTitle } = useStore();
+  const firstPaneId = firstLeaf(tab.root).id;
   return (
     <TerminalPane
       paneId={paneId}
@@ -47,6 +49,7 @@ function PaneLeaf({
       onClose={() => closePane(tab.id, paneId)}
       onToggleZoom={() => toggleZoom(tab.id, paneId)}
       onContextMenu={(x, y) => onPaneMenu({ x, y, paneId })}
+      onCwdChange={paneId === firstPaneId ? (cwd) => setTitle(tab.id, basename(cwd)) : undefined}
     />
   );
 }

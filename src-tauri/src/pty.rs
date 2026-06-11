@@ -73,6 +73,11 @@ impl PtyManager {
         if let Some(cwd) = cwd {
             cmd.cwd(cwd);
         }
+        // Start as a login shell so the user's shell profile / path_helper
+        // (Homebrew, etc.) runs. Without this, commands like `docker compose`,
+        // `ssh`, and any tool registered via /etc/paths.d go unfound.
+        #[cfg(not(target_os = "windows"))]
+        cmd.arg("-l");
         cmd.env("TERM", "xterm-256color");
 
         let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;

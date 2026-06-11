@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useStore } from "../state/store";
 import { terminals } from "../terminal/manager";
 import { basename, shellQuote } from "../workspace";
+import { ContextMenu, MenuItem } from "./ContextMenu";
 import {
   ChevronIcon,
   CollapseAllIcon,
@@ -23,6 +25,7 @@ interface ExplorerCtx {
   toggle: (path: string) => void;
   onFile: (path: string) => void;
   onCd: (path: string) => void;
+  onMenu: (e: React.MouseEvent, entry: Entry) => void;
 }
 
 function indentStyle(depth: number) {
@@ -69,6 +72,7 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
         // mouse clicks from stealing focus away from the terminal.
         onPointerDown={(e) => e.preventDefault()}
         onClick={() => ctx.onFile(entry.path)}
+        onContextMenu={(e) => ctx.onMenu(e, entry)}
       >
         <span className="tree-chevron-spacer" />
         <FileIcon className="tree-icon file" />
@@ -87,6 +91,7 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
         onPointerDown={(e) => e.preventDefault()}
         onClick={() => ctx.toggle(entry.path)}
         onDoubleClick={() => ctx.onCd(entry.path)}
+        onContextMenu={(e) => ctx.onMenu(e, entry)}
       >
         <ChevronIcon className={`tree-chevron${open ? " open" : ""}`} />
         <FolderIcon className="tree-icon folder" />
@@ -103,6 +108,7 @@ export function ExplorerPanel() {
   const { projectRoot, activePaneId, openFile } = useStore();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
+  const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
 
   const ctx: ExplorerCtx = {
     expanded,
@@ -116,6 +122,30 @@ export function ExplorerPanel() {
     // "\r" mirrors a real Enter keypress: Unix line discipline maps CR to NL
     // on input, and Windows ConPTY only executes the line on CR — not LF.
     onCd: (path) => activePaneId && terminals.sendText(activePaneId, `cd ${shellQuote(path)}\r`),
+    onMenu: (e, entry) => {
+      e.preventDefault();
+      setMenu({ x: e.clientX, y: e.clientY, entry });
+    },
+  };
+
+  // Right-click actions for a file/folder. "Copy Path" puts the raw path on the
+  // system clipboard (ready for ⌘V anywhere); "Paste to Terminal" types the
+  // shell-quoted path straight into the focused terminal, ready to run.
+  const menuItems = (entry: Entry): MenuItem[] => {
+    const items: MenuItem[] = entry.is_dir
+      ? [{ label: "Open in Terminal (cd)", disabled: !activePaneId, onClick: () => ctx.onCd(entry.path) }]
+      : [{ label: "Open", onClick: () => openFile(entry.path) }];
+    items.push(
+      { label: "Copy Path", onClick: () => void writeText(entry.path) },
+      { label: "Copy Name", onClick: () => void writeText(entry.name) },
+      {
+        label: "Paste to Terminal",
+        disabled: !activePaneId,
+        onClick: () =>
+          activePaneId && terminals.sendText(activePaneId, `${shellQuote(entry.path)} `),
+      }
+    );
+    return items;
   };
 
   return (
@@ -151,6 +181,14 @@ export function ExplorerPanel() {
           <div className="tree-note">No folder open</div>
         )}
       </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={menuItems(menu.entry)}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   );
 }

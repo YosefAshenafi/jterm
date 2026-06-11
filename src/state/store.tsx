@@ -32,6 +32,7 @@ import {
 } from "./tree";
 import { EditorState, editorReducer, emptyEditor, isDirty } from "./editor";
 import { basename, resolveCwd } from "../workspace";
+import { homeDir } from "@tauri-apps/api/path";
 
 /** Which surface the keyboard (close / save) should act on. */
 export type FocusRegion = "terminal" | "editor";
@@ -45,18 +46,56 @@ export interface RevealTarget {
   line: number;
 }
 
+const SNAPSHOT_KEY = "jterm_tab_titles";
+
+interface TabSnapshot {
+  title: string;
+  titleManual?: boolean;
+}
+
+function saveSnapshot(tabs: Tab[], activeTabId: string): void {
+  const data = {
+    tabs: tabs.map((t) => ({ title: t.title, titleManual: t.titleManual })),
+    activeIndex: tabs.findIndex((t) => t.id === activeTabId),
+  };
+  try {
+    localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(data));
+  } catch { /* quota exceeded — silently ignore */ }
+}
+
+function loadSnapshot(): { tabs: TabSnapshot[]; activeIndex: number } | null {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 function makeTab(): Tab {
   const leaf = makeLeaf();
   return { id: newId("tab"), title: "Terminal", root: leaf, activePaneId: leaf.id };
 }
 
 function initialState(): AppState {
+  const snap = loadSnapshot();
+  if (snap && snap.tabs.length > 0) {
+    const tabs = snap.tabs.map((s) => {
+      const t = makeTab();
+      t.title = s.title;
+      t.titleManual = s.titleManual ?? false;
+      return t;
+    });
+    const idx = Math.min(snap.activeIndex, tabs.length - 1);
+    return { tabs, activeTabId: tabs[idx].id };
+  }
   const tab = makeTab();
   return { tabs: [tab], activeTabId: tab.id };
 }
 
 type Action =
-  | { type: "new-tab" }
+  | { type: "new-tab"; leaf: LeafNode; tabId: string; title?: string }
   | { type: "close-tab"; tabId: string }
   | { type: "select-tab"; tabId: string }
   | { type: "select-tab-index"; index: number }
@@ -97,7 +136,12 @@ function closeTab(s: AppState, tabId: string): AppState {
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "new-tab": {
-      const tab = makeTab();
+      const tab: Tab = {
+        id: action.tabId,
+        title: action.title ?? "Terminal",
+        root: action.leaf,
+        activePaneId: action.leaf.id,
+      };
       return { tabs: [...state.tabs, tab], activeTabId: tab.id };
     }
     case "select-tab":
@@ -196,7 +240,7 @@ interface StoreApi {
   setSidebarView(view: SidebarView): void;
   /** Open the sidebar to a view, resolving the project folder if not set yet. */
   openSidebarView(view: SidebarView): Promise<void>;
-  newTab(): void;
+  newTab(): Promise<void>;
   closeTab(tabId: string): void;
   selectTab(tabId: string): void;
   selectTabIndex(index: number): void;
@@ -242,7 +286,7 @@ const StoreContext = createContext<StoreApi | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [projectRoot, setProjectRoot] = useState<string | null>(null);
+  const [projectRootMap, setProjectRootMap] = useState<Record<string, string | null>>({});
   const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
   const [searchNonce, setSearchNonce] = useState(0);
   const [reveal, setReveal] = useState<RevealTarget | null>(null);
@@ -265,8 +309,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     saveSettings(settings);
   }, [settings]);
 
+  const activeTabId = state.activeTabId;
   const activePaneId =
-    state.tabs.find((t) => t.id === state.activeTabId)?.activePaneId ?? null;
+    state.tabs.find((t) => t.id === activeTabId)?.activePaneId ?? null;
+  const projectRoot = projectRootMap[activeTabId] ?? null;
+
+  // Per-tab project root: sync the active pane's CWD into the current tab's
+  // entry whenever the sidebar is open. The effect fires on tab switch too.
+  useEffect(() => {
+    if (!sidebarOpen || !activePaneId) return;
+    resolveCwd(activePaneId).then((cwd) => {
+      setProjectRootMap((prev) => ({ ...prev, [activeTabId]: cwd }));
+    });
+  }, [activePaneId, sidebarOpen, activeTabId]);
+
+  // Keep the map tidy — remove entries for closed tabs.
+  useEffect(() => {
+    const ids = new Set(state.tabs.map((t) => t.id));
+    setProjectRootMap((prev) => {
+      const next = { ...prev };
+      for (const k of Object.keys(next)) if (!ids.has(k)) delete next[k];
+      return next;
+    });
+  }, [state.tabs]);
+
+  // Persist tab titles across restarts.
+  useEffect(() => {
+    saveSnapshot(state.tabs, state.activeTabId);
+  }, [state.tabs, state.activeTabId]);
 
   const api = useMemo<StoreApi>(
     () => ({
@@ -279,15 +349,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       searchNonce,
       toggleSidebar: () => setSidebarOpen((v) => !v),
       setSidebarOpen,
-      setProjectRoot,
+      setProjectRoot: (root) => {
+        setProjectRootMap((prev) => ({ ...prev, [activeTabId]: root }));
+      },
       setSidebarView,
       openSidebarView: async (view) => {
         setSidebarView(view);
         setSidebarOpen(true);
         if (view === "search") setSearchNonce((n) => n + 1);
-        if (!projectRoot) setProjectRoot(await resolveCwd(activePaneId));
+        if (!projectRootMap[activeTabId]) {
+          const cwd = await resolveCwd(activePaneId);
+          setProjectRootMap((prev) => ({ ...prev, [activeTabId]: cwd }));
+        }
       },
-      newTab: () => dispatch({ type: "new-tab" }),
+      newTab: async () => {
+        const leaf = makeLeaf();
+        const tabId = newId("tab");
+        // Close sidebar first — the folder belongs to the previous tab.
+        if (sidebarOpen) {
+          setSidebarOpen(false);
+        }
+        const h = await homeDir();
+        terminals.setSpawnCwd(leaf.id, Promise.resolve(h));
+        dispatch({ type: "new-tab", leaf, tabId, title: basename(h) });
+        setProjectRootMap((prev) => ({ ...prev, [tabId]: h }));
+      },
       closeTab: (tabId) => dispatch({ type: "close-tab", tabId }),
       selectTab: (tabId) => dispatch({ type: "select-tab", tabId }),
       selectTabIndex: (index) => dispatch({ type: "select-tab-index", index }),
@@ -390,9 +476,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       state,
+      activeTabId,
       activePaneId,
       sidebarOpen,
       projectRoot,
+      projectRootMap,
       sidebarView,
       searchNonce,
       reveal,
