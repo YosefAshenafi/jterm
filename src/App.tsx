@@ -30,10 +30,11 @@ export default function App() {
       const tab = tabOf(paneId);
       if (tab) store.closePane(tab.id, paneId);
     };
-    terminals.onTitle = (paneId, title) => {
-      const tab = tabOf(paneId);
-      if (tab && title && tab.activePaneId === paneId) store.setTitle(tab.id, title);
-    };
+    // Intentionally NOT wiring shell-emitted titles to the tab name: a tab is
+    // named once from its first terminal's directory and then stays put. Letting
+    // every active pane's shell title rewrite it made the top tab name flip on
+    // each new inner terminal / command. Users can still rename a tab manually.
+    terminals.onTitle = undefined;
   });
 
   // Reflect native full-screen state as a `fullscreen` class on <html> so the

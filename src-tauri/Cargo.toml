@@ -29,3 +29,10 @@ portable-pty = "0.8"
 base64 = "0.22"
 sysinfo = "0.32"
 png = "0.17"
+
+# Read file references off the macOS clipboard (an image copied in Finder lands
+# on the pasteboard as a file URL, not raw image bytes).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"

@@ -103,7 +103,11 @@ class TerminalManager {
     this.panes.set(paneId, pane);
 
     term.onData((data) => {
-      if (pane.ptyId != null) invoke("pty_write", { id: pane.ptyId, data });
+      if (pane.ptyId != null) {
+        const prev = this.writeQueue.get(paneId) ?? Promise.resolve();
+        const next: Promise<void> = prev.then(() => invoke("pty_write", { id: pane.ptyId, data }) as unknown as Promise<void>);
+        this.writeQueue.set(paneId, next);
+      }
     });
     term.onTitleChange((title) => this.onTitle?.(paneId, title));
 
@@ -113,7 +117,9 @@ class TerminalManager {
     term.attachCustomKeyEventHandler((ev) => {
       if (ev.key === "Enter" && ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
         if (ev.type === "keydown" && pane.ptyId != null) {
-          invoke("pty_write", { id: pane.ptyId, data: "\x1b\r" });
+          const prev = this.writeQueue.get(paneId) ?? Promise.resolve();
+          const next: Promise<void> = prev.then(() => invoke("pty_write", { id: pane.ptyId, data: "\x1b\r" }) as unknown as Promise<void>);
+          this.writeQueue.set(paneId, next);
         }
         return false; // suppress xterm's plain "\r" in every event phase
       }
@@ -129,6 +135,9 @@ class TerminalManager {
     if (pane.element.parentElement !== container) container.appendChild(pane.element);
     this.fit(paneId);
   }
+
+  /** Serialize writes per-pane so rapid keystrokes arrive in order. */
+  private writeQueue = new Map<string, Promise<void>>();
 
   /** Pre-assign the directory a not-yet-spawned pane's shell starts in. */
   setSpawnCwd(paneId: string, cwd: Promise<string>): void {
@@ -240,18 +249,41 @@ class TerminalManager {
   async paste(paneId: string): Promise<void> {
     const pane = this.panes.get(paneId);
     if (!pane || pane.ptyId == null) return;
-    // Text first — reading rejects when the clipboard holds none.
-    const text = await clipboardRead().catch(() => null);
-    if (text) {
-      invoke("pty_write", { id: pane.ptyId, data: text });
+    const ptyId = pane.ptyId;
+    const stillLive = () => this.panes.get(paneId) === pane && pane.ptyId != null;
+
+    // Deliver a file path: a TUI with bracketed-paste mode on (Claude Code,
+    // Codex, …) receives it as a single bracketed paste and recognizes an image
+    // file, rendering an inline `[Image #N]` placeholder — exactly like iTerm. A
+    // plain shell prompt has nothing to render a placeholder, so it gets a
+    // shell-quoted path it can pass to a command.
+    const pasteFilePath = (p: string) => {
+      if (pane.term.modes.bracketedPasteMode) pane.term.paste(p);
+      else invoke("pty_write", { id: ptyId, data: `${shellQuote(p)} ` });
+    };
+
+    // 1) A file copied in Finder (very often an image/screenshot) lands on the
+    //    clipboard as a file *reference* plus its name as plain text. Prefer the
+    //    real file path over that bare filename, or the image is lost as text.
+    const files = await invoke<string[]>("clipboard_file_paths").catch(() => [] as string[]);
+    if (files.length > 0) {
+      if (stillLive()) pasteFilePath(files[0]);
       return;
     }
-    // No text: a copied photo/screenshot is saved to a temp PNG and its quoted
-    // path is typed into the shell, ready to hand to a command or a TUI.
-    const path = await invoke<string | null>("save_clipboard_image").catch(() => null);
-    if (path && this.panes.get(paneId) === pane && pane.ptyId != null) {
-      invoke("pty_write", { id: pane.ptyId, data: `${shellQuote(path)} ` });
+
+    // 2) Plain text. Routed through xterm so bracketed-paste mode is honored
+    //    (the app gets `ESC[200~ … ESC[201~`), which stops multi-line pastes from
+    //    auto-running and lets TUIs treat the chunk as one paste.
+    const text = await clipboardRead().catch(() => null);
+    if (text) {
+      pane.term.paste(text);
+      return;
     }
+
+    // 3) Raw image bytes (e.g. a region screenshot copied straight to the
+    //    clipboard, with no backing file): materialize a temp PNG and paste it.
+    const path = await invoke<string | null>("save_clipboard_image").catch(() => null);
+    if (path && stillLive()) pasteFilePath(path);
   }
 
   /** Dispose any terminals whose panes no longer exist in the layout. */
@@ -263,6 +295,7 @@ class TerminalManager {
 
   private dispose(paneId: string): void {
     this.spawnCwd.delete(paneId);
+    this.writeQueue.delete(paneId);
     const pane = this.panes.get(paneId);
     if (!pane) return;
     if (pane.ptyId != null) invoke("pty_kill", { id: pane.ptyId });

@@ -141,6 +141,43 @@ async fn save_clipboard_image(app: tauri::AppHandle) -> Result<Option<String>, S
     .await
 }
 
+/// File paths currently on the clipboard. When an image (or any file) is copied
+/// in Finder, macOS puts a *file reference* on the pasteboard plus the file's
+/// name as plain text — not raw image bytes — so `save_clipboard_image` finds
+/// nothing and a naive text paste yields just the bare filename. Reading the
+/// file URL lets us paste the real path instead. Empty off macOS / when none.
+#[tauri::command]
+fn clipboard_file_paths() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        read_clipboard_file_paths()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Vec::new()
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn read_clipboard_file_paths() -> Vec<String> {
+    use objc2_app_kit::NSPasteboard;
+    use objc2_foundation::{NSString, NSURL};
+
+    let mut out = Vec::new();
+    let pb = NSPasteboard::generalPasteboard();
+    // "public.file-url" is the modern UTI for a single file reference; it
+    // decodes (e.g. %20 -> space) once routed through NSURL.path.
+    let ty = NSString::from_str("public.file-url");
+    if let Some(s) = pb.stringForType(&ty) {
+        if let Some(url) = NSURL::URLWithString(&s) {
+            if let Some(path) = url.path() {
+                out.push(path.to_string());
+            }
+        }
+    }
+    out
+}
+
 /// Current working directory of a pane's shell (for the project toolbar/sidebar).
 #[tauri::command]
 async fn pane_cwd(state: State<'_, PtyManager>, id: u32) -> Result<Option<String>, String> {
@@ -690,6 +727,7 @@ pub fn run() {
             write_file,
             pane_cwd,
             save_clipboard_image,
+            clipboard_file_paths,
             search_in_folder,
             git_status,
             git_stage,
