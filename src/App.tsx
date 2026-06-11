@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore } from "./state/store";
 import { collectLeaves } from "./state/tree";
@@ -6,9 +6,8 @@ import { terminals } from "./terminal/manager";
 import { TabBar } from "./components/TabBar";
 import { Toolbar } from "./components/Toolbar";
 import { Sidebar } from "./components/Sidebar";
-import { EditorArea } from "./components/EditorArea";
-import { PaneTree, MenuRequest } from "./components/PaneTree";
-import { ContextMenu, MenuItem } from "./components/ContextMenu";
+import { WorkArea } from "./components/WorkArea";
+import { CommandPalette } from "./components/CommandPalette";
 
 const isMac =
   /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
@@ -16,17 +15,20 @@ const isMac =
 export default function App() {
   const store = useStore();
   const { state } = store;
-  const [menu, setMenu] = useState<MenuRequest | null>(null);
 
-  const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
-
-  // Find which tab owns a pane (used by shell-exit / title callbacks).
+  // Find which tab owns a pane (used by the shell-exit callback).
   const tabOf = (paneId: string) =>
     state.tabs.find((t) => collectLeaves(t.root).some((l) => l.id === paneId));
 
   // Bridge the imperative terminal manager back into store actions.
   useEffect(() => {
     terminals.onExit = (paneId) => {
+      // A bottom-panel terminal's shell exited: drop that tab (and hide the
+      // panel if it was the last one).
+      if (store.panelTerminals.includes(paneId)) {
+        store.closePanelTerminal(paneId);
+        return;
+      }
       const tab = tabOf(paneId);
       if (tab) store.closePane(tab.id, paneId);
     };
@@ -35,6 +37,8 @@ export default function App() {
     // every active pane's shell title rewrite it made the top tab name flip on
     // each new inner terminal / command. Users can still rename a tab manually.
     terminals.onTitle = undefined;
+    // Option/Alt-click on a terminal link downloads it to the Downloads folder.
+    terminals.onLinkDownload = (url) => store.downloadUrl(url);
   });
 
   // Reflect native full-screen state as a `fullscreen` class on <html> so the
@@ -58,12 +62,14 @@ export default function App() {
     return () => unlisten?.();
   }, []);
 
-  // Tear down terminals whose panes were closed.
+  // Tear down terminals whose panes were closed. Bottom-panel terminals live
+  // outside the pane tree, so keep them alive explicitly.
   useEffect(() => {
     const live = new Set<string>();
     state.tabs.forEach((t) => collectLeaves(t.root).forEach((l) => live.add(l.id)));
+    store.panelTerminals.forEach((id) => live.add(id));
     terminals.reconcile(live);
-  }, [state]);
+  }, [state, store.panelTerminals]);
 
   // Keyboard shortcuts (Cmd on macOS, Ctrl+Shift elsewhere to avoid clobbering
   // terminal control characters like ^C/^D/^W).
@@ -87,13 +93,23 @@ export default function App() {
       });
       if (k === "f" && e.shiftKey) return run(() => store.openSidebarView("search"));
       if (k === "g" && e.shiftKey) return run(() => store.openSidebarView("git"));
+      // Bottom terminal panel toggles from anywhere — including while typing in a
+      // file or terminal. ⌘⇧J adds a new terminal tab to it (VS Code-style).
+      if (k === "j" && e.shiftKey) return run(() => store.addPanelTerminal());
+      if (k === "j" && !e.shiftKey) return run(() => store.togglePanel());
+      // VS Code-style: ⌘P quick-open files, ⌘G go-to-line, ⌘F find-in-file. These
+      // must work even while the editor/terminal has focus, so they sit here
+      // (before the field/editor guard below).
+      if (k === "p" && !e.shiftKey) return run(() => store.openQuickFiles());
+      if (k === "g" && !e.shiftKey) return run(() => store.openGoToLine());
+      if (k === "f" && !e.shiftKey) return run(() => store.openFind());
 
       // xterm types into a hidden helper <textarea>, so anything inside a
       // terminal host is the terminal, not a text field.
       const el = e.target as HTMLElement | null;
       const tag = el?.tagName;
       const inTerminal = !!el?.closest(".terminal-host");
-      const inEditor = !!el?.closest(".editor");
+      const inEditor = !!el?.closest(".editor-body");
       // In any other text field (search box, commit message, folder path) every
       // shortcut stays native — Cmd+W there must not close an editor file the
       // user isn't even looking at.
@@ -116,12 +132,18 @@ export default function App() {
       // e.key reports "}"/"{" and would never match "]"/"[".
       if (e.code === "BracketRight") return run(() => store.cyclePane(1));
       if (e.code === "BracketLeft") return run(() => store.cyclePane(-1));
+      // Copy/paste must target the terminal that actually has focus: the bottom
+      // panel's terminal when the keystroke came from inside it, else the grid's
+      // active pane. (Previously these always used the grid pane, so pasting into
+      // the panel silently went to a hidden terminal.)
+      const focusedTerminal = () =>
+        el?.closest(".term-panel") ? store.activePanelTerminal : activePaneId();
       if (k === "v") {
-        const id = activePaneId();
+        const id = focusedTerminal();
         if (id) return run(() => terminals.paste(id));
       }
       if (k === "c") {
-        const id = activePaneId();
+        const id = focusedTerminal();
         if (id && terminals.getSelection(id)) return run(() => terminals.copy(id));
         return; // no selection: let ^C pass through to the shell
       }
@@ -142,21 +164,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [state, store]);
 
-  const menuItems = (req: MenuRequest): MenuItem[] => {
-    const tab = tabOf(req.paneId);
-    const hasSelection = !!terminals.getSelection(req.paneId);
-    return [
-      { label: "Split Right", onClick: () => store.split("row") },
-      { label: "Split Down", onClick: () => store.split("column") },
-      { label: "Copy", disabled: !hasSelection, onClick: () => terminals.copy(req.paneId) },
-      { label: "Paste", onClick: () => terminals.paste(req.paneId) },
-      {
-        label: "Close Pane",
-        onClick: () => tab && store.closePane(tab.id, req.paneId),
-      },
-    ];
-  };
-
   return (
     <div className="app">
       {/* "deep" makes the whole bar a drag region (interactive children like
@@ -168,20 +175,13 @@ export default function App() {
       <Toolbar />
       <div className="main">
         {store.sidebarOpen && <Sidebar />}
-        {store.editor.files.length > 0 && <EditorArea />}
-        <div className="workspace">
-          {activeTab && (
-            <PaneTree node={activeTab.root} tab={activeTab} onPaneMenu={setMenu} />
-          )}
-        </div>
+        <WorkArea />
       </div>
-      {menu && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={menuItems(menu)}
-          onClose={() => setMenu(null)}
-        />
+      <CommandPalette />
+      {store.toast && (
+        <div className="toast" role="status" onPointerDown={() => store.dismissToast()}>
+          {store.toast}
+        </div>
       )}
     </div>
   );

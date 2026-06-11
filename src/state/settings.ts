@@ -3,19 +3,32 @@
 // tab underlines, divider hover) via the `--accent` / `--pane-border` CSS
 // variables; font size and cursor blink are pushed into every xterm instance.
 
-import { FONT_SIZE } from "../terminal/theme";
+import { FONT_FAMILY, FONT_SIZE } from "../terminal/theme";
+
+export type CursorStyle = "block" | "bar" | "underline";
 
 export interface Settings {
   /** Hex color (`#rrggbb`) for the active-pane border and other highlights. */
   accent: string;
+  /** Monospace font stack used by every terminal. */
+  fontFamily: string;
   fontSize: number;
+  /** Multiplier applied to the line box height (1 = tight). */
+  lineHeight: number;
+  cursorStyle: CursorStyle;
   cursorBlink: boolean;
+  /** Lines of scrollback kept per terminal. */
+  scrollback: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   accent: "#5ac8fa",
+  fontFamily: FONT_FAMILY,
   fontSize: FONT_SIZE,
+  lineHeight: 1.0,
+  cursorStyle: "block",
   cursorBlink: true,
+  scrollback: 10000,
 };
 
 export const ACCENT_PRESETS = [
@@ -26,6 +39,27 @@ export const ACCENT_PRESETS = [
   "#c678dd", // purple
   "#56b6c2", // teal
 ];
+
+/** Font choices offered in settings. Each value is a CSS font stack that falls
+ * back to the system monospace when the named face isn't installed. */
+export const FONT_PRESETS: { label: string; value: string }[] = [
+  { label: "System Mono", value: FONT_FAMILY },
+  { label: "SF Mono", value: '"SF Mono", ui-monospace, monospace' },
+  { label: "Menlo", value: "Menlo, monospace" },
+  { label: "Monaco", value: "Monaco, monospace" },
+  { label: "JetBrains Mono", value: '"JetBrains Mono", monospace' },
+  { label: "Cascadia Code", value: '"Cascadia Code", monospace' },
+  { label: "Fira Code", value: '"Fira Code", monospace' },
+  { label: "Courier New", value: '"Courier New", monospace' },
+];
+
+export const CURSOR_STYLES: { label: string; value: CursorStyle }[] = [
+  { label: "Block", value: "block" },
+  { label: "Bar", value: "bar" },
+  { label: "Underline", value: "underline" },
+];
+
+export const SCROLLBACK_PRESETS = [1000, 5000, 10000, 50000, 100000];
 
 const KEY = "jterm.settings";
 

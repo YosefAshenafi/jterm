@@ -10,6 +10,8 @@ interface MenuRequest {
   x: number;
   y: number;
   paneId: string;
+  /** http(s) link under the pointer at right-click time, if any. */
+  link?: string;
 }
 
 interface TreeProps {
@@ -48,7 +50,7 @@ function PaneLeaf({
       onFocus={() => focusPane(tab.id, paneId)}
       onClose={() => closePane(tab.id, paneId)}
       onToggleZoom={() => toggleZoom(tab.id, paneId)}
-      onContextMenu={(x, y) => onPaneMenu({ x, y, paneId })}
+      onContextMenu={(x, y, link) => onPaneMenu({ x, y, paneId, link })}
       onCwdChange={paneId === firstPaneId ? (cwd) => setTitle(tab.id, basename(cwd)) : undefined}
     />
   );

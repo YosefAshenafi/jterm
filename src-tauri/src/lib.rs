@@ -84,6 +84,75 @@ async fn read_file(path: String) -> Result<String, String> {
     .await
 }
 
+const IMAGE_MAX_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Read a file as base64 — used to show images inline in the editor as a data
+/// URL (the editor renders them like VS Code instead of failing as "binary").
+#[tauri::command]
+async fn read_file_base64(path: String) -> Result<String, String> {
+    blocking(move || {
+        use base64::Engine as _;
+        let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+        if meta.len() > IMAGE_MAX_BYTES {
+            return Err(format!(
+                "Image is too large to preview ({:.1} MB)",
+                meta.len() as f64 / (1024.0 * 1024.0)
+            ));
+        }
+        let bytes = std::fs::read(&path).map_err(|e| e.to_string())?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+    })
+    .await
+}
+
+/// Download an http(s) link to the user's Downloads folder, naming the file from
+/// the server (Content-Disposition) or the URL. Returns the saved path. Uses the
+/// system `curl` so no extra HTTP/TLS dependency is pulled in.
+#[tauri::command]
+async fn download_url(app: tauri::AppHandle, url: String) -> Result<String, String> {
+    use tauri::Manager;
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("Only http(s) links can be downloaded".into());
+    }
+    let downloads = app
+        .path()
+        .download_dir()
+        .map_err(|e| format!("No Downloads folder: {e}"))?;
+    let dir = downloads.to_string_lossy().into_owned();
+    blocking(move || {
+        std::fs::create_dir_all(&dir).ok();
+        // -f fail on HTTP errors, -L follow redirects, -O remote name, -J honor
+        // Content-Disposition; -w prints the path actually written.
+        let output = std::process::Command::new("curl")
+            .args([
+                "-fLOJ",
+                "--no-progress-meter",
+                "--output-dir",
+                &dir,
+                "-w",
+                "%{filename_effective}",
+                &url,
+            ])
+            .output()
+            .map_err(|e| format!("Could not run curl: {e}"))?;
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            let msg = err.trim();
+            return Err(if msg.is_empty() {
+                "Download failed".into()
+            } else {
+                format!("Download failed: {msg}")
+            });
+        }
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if path.is_empty() {
+            return Err("Download produced no file (link has no filename?)".into());
+        }
+        Ok(path)
+    })
+    .await
+}
+
 /// Write editor contents back to disk atomically: write to a temp file in the
 /// same directory, fsync, then rename over the target. A crash or full disk
 /// mid-save leaves the original intact instead of a truncated file.
@@ -187,6 +256,65 @@ async fn pane_cwd(state: State<'_, PtyManager>, id: u32) -> Result<Option<String
             .map_err(|e| e.to_string()),
         None => Ok(None),
     }
+}
+
+/// A file in the project, for the ⌘P quick-open picker.
+#[derive(Serialize)]
+struct FileEntry {
+    /// Path relative to the project root (what the user sees / fuzzy-matches).
+    rel: String,
+    /// Absolute path used to open the file.
+    path: String,
+}
+
+const LIST_MAX_FILES: usize = 20000;
+
+/// Every file under `root`, skipping hidden and heavy build/vendor directories
+/// (the same set the workspace search ignores). Sorted by relative path. Used by
+/// the quick-open picker; capped so a giant tree can't stall the UI.
+#[tauri::command]
+async fn list_files(root: String) -> Result<Vec<FileEntry>, String> {
+    blocking(move || {
+        let root = std::path::PathBuf::from(&root);
+        let mut out: Vec<FileEntry> = Vec::new();
+        let mut stack = vec![root.clone()];
+        'walk: while let Some(dir) = stack.pop() {
+            let rd = match std::fs::read_dir(&dir) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            for entry in rd.filter_map(|e| e.ok()) {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                let file_type = match entry.file_type() {
+                    Ok(t) => t,
+                    Err(_) => continue,
+                };
+                if file_type.is_dir() {
+                    if !name.starts_with('.') && !SKIP_DIRS.contains(&name.as_ref()) {
+                        stack.push(entry.path());
+                    }
+                } else if file_type.is_file() {
+                    let p = entry.path();
+                    let rel = p
+                        .strip_prefix(&root)
+                        .unwrap_or(&p)
+                        .to_string_lossy()
+                        .replace('\\', "/");
+                    out.push(FileEntry {
+                        rel,
+                        path: p.to_string_lossy().into_owned(),
+                    });
+                    if out.len() >= LIST_MAX_FILES {
+                        break 'walk;
+                    }
+                }
+            }
+        }
+        out.sort_by(|a, b| a.rel.cmp(&b.rel));
+        Ok(out)
+    })
+    .await
 }
 
 // ---- Full-text search -------------------------------------------------------
@@ -724,10 +852,13 @@ pub fn run() {
             pty_kill,
             read_dir,
             read_file,
+            read_file_base64,
+            download_url,
             write_file,
             pane_cwd,
             save_clipboard_image,
             clipboard_file_paths,
+            list_files,
             search_in_folder,
             git_status,
             git_stage,

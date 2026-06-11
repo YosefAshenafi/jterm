@@ -41,21 +41,57 @@ class TerminalManager {
   private spawnCwd = new Map<string, Promise<string>>();
   /** User prefs applied to every terminal (see settings store). The accent
    * doubles as the cursor color so it tracks the UI border color. */
-  private prefs = { fontSize: FONT_SIZE, cursorBlink: true, accent: DEFAULT_THEME.cursor! };
+  private prefs = {
+    fontFamily: FONT_FAMILY,
+    fontSize: FONT_SIZE,
+    lineHeight: 1.0,
+    cursorStyle: "block" as "block" | "bar" | "underline",
+    cursorBlink: true,
+    scrollback: 10000,
+    accent: DEFAULT_THEME.cursor!,
+  };
   /** Fired when a shell exits so the UI can close its pane. */
   onExit?: (paneId: string) => void;
   /** Fired when the shell sets the window/tab title. */
   onTitle?: (paneId: string, title: string) => void;
+  /** Fired when a link is Option/Alt-clicked, to download it. */
+  onLinkDownload?: (url: string) => void;
+  /** The link the pointer is currently over (so right-click can act on it). */
+  private hoveredLink: string | null = null;
+
+  /** http(s) URL under the pointer right now, if any. */
+  getHoveredLink(): string | null {
+    return this.hoveredLink;
+  }
 
   /** Apply preference changes to existing terminals and remember them for new
    * ones. Re-fits after a font-size change so the grid matches the new metrics. */
-  setPrefs(prefs: Partial<{ fontSize: number; cursorBlink: boolean; accent: string }>): void {
-    const fontChanged = prefs.fontSize != null && prefs.fontSize !== this.prefs.fontSize;
+  setPrefs(
+    prefs: Partial<{
+      fontFamily: string;
+      fontSize: number;
+      lineHeight: number;
+      cursorStyle: "block" | "bar" | "underline";
+      cursorBlink: boolean;
+      scrollback: number;
+      accent: string;
+    }>
+  ): void {
+    // Font metrics (family / size / line height) change the cell grid, so a
+    // re-fit is needed for any of them.
+    const fontChanged =
+      (prefs.fontFamily != null && prefs.fontFamily !== this.prefs.fontFamily) ||
+      (prefs.fontSize != null && prefs.fontSize !== this.prefs.fontSize) ||
+      (prefs.lineHeight != null && prefs.lineHeight !== this.prefs.lineHeight);
     const accentChanged = prefs.accent != null && prefs.accent !== this.prefs.accent;
     this.prefs = { ...this.prefs, ...prefs };
     for (const [paneId, pane] of this.panes) {
+      pane.term.options.fontFamily = this.prefs.fontFamily;
       pane.term.options.fontSize = this.prefs.fontSize;
+      pane.term.options.lineHeight = this.prefs.lineHeight;
+      pane.term.options.cursorStyle = this.prefs.cursorStyle;
       pane.term.options.cursorBlink = this.prefs.cursorBlink;
+      pane.term.options.scrollback = this.prefs.scrollback;
       if (accentChanged) pane.term.options.theme = this.theme();
       if (fontChanged) this.fit(paneId);
     }
@@ -74,22 +110,38 @@ class TerminalManager {
     element.className = "terminal-host";
 
     const term = new Terminal({
-      fontFamily: FONT_FAMILY,
+      fontFamily: this.prefs.fontFamily,
       fontSize: this.prefs.fontSize,
+      lineHeight: this.prefs.lineHeight,
+      cursorStyle: this.prefs.cursorStyle,
       cursorBlink: this.prefs.cursorBlink,
       allowProposedApi: true,
       macOptionIsMeta: true,
-      scrollback: 10000,
+      scrollback: this.prefs.scrollback,
       theme: this.theme(),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
     // window.open goes nowhere inside a Tauri webview — route detected links
     // through the opener plugin (whose capability is scoped to http/https).
+    // Plain click opens in the browser; Option/Alt-click downloads the target.
+    // We also track the hovered link so a right-click menu can act on it.
     term.loadAddon(
-      new WebLinksAddon((_event, uri) => {
-        if (/^https?:\/\//i.test(uri)) void openUrl(uri);
-      })
+      new WebLinksAddon(
+        (event, uri) => {
+          if (!/^https?:\/\//i.test(uri)) return;
+          if (event.altKey) this.onLinkDownload?.(uri);
+          else void openUrl(uri);
+        },
+        {
+          hover: (_e, text) => {
+            this.hoveredLink = /^https?:\/\//i.test(text) ? text : null;
+          },
+          leave: () => {
+            this.hoveredLink = null;
+          },
+        }
+      )
     );
     term.open(element);
     try {
@@ -291,6 +343,12 @@ class TerminalManager {
     for (const paneId of [...this.panes.keys()]) {
       if (!liveIds.has(paneId)) this.dispose(paneId);
     }
+  }
+
+  /** Dispose a single terminal (e.g. the bottom panel when its shell exits, so
+   * the next open spawns a fresh shell). No-op if it doesn't exist. */
+  disposePane(paneId: string): void {
+    this.dispose(paneId);
   }
 
   private dispose(paneId: string): void {
