@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { terminals } from "../terminal/manager";
+import { useStore } from "../state/store";
+import {
+  computeDropTarget,
+  DropTarget,
+  moveGhost,
+  removeGhost,
+  showGhost,
+  usePaneDnd,
+} from "../state/paneDnd";
+import { trackPointerDrag } from "../drag";
 import { MaximizeIcon, RestoreIcon } from "./icons";
 import { basename, resolveCwd } from "../workspace";
 
@@ -13,7 +23,7 @@ interface Props {
   onFocus: () => void;
   onClose: () => void;
   onToggleZoom: () => void;
-  onContextMenu: (x: number, y: number) => void;
+  onContextMenu: (x: number, y: number, link?: string) => void;
   /** Called when the CWD resolves for the first pane in a tab. */
   onCwdChange?: (cwd: string) => void;
 }
@@ -45,6 +55,50 @@ export function TerminalPane({
   const onCwdChangeRef = useRef(onCwdChange);
   onCwdChangeRef.current = onCwdChange;
   const titleSet = useRef(false);
+  const { movePane } = useStore();
+  const dnd = usePaneDnd();
+  const cwdRef = useRef(cwd);
+  cwdRef.current = cwd;
+
+  // The drop indicator this pane should paint, if it is the current target.
+  const dropZone =
+    dnd.dropTarget?.kind === "pane" && dnd.dropTarget.paneId === paneId
+      ? dnd.dropTarget.zone
+      : null;
+
+  // Drag the pane by its header: split it onto another pane, drop it on a tab, or
+  // detach it to a new tab. A small movement threshold keeps plain header clicks
+  // from starting a drag.
+  const startHeaderDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let dragging = false;
+    let target: DropTarget | null = null;
+    trackPointerDrag(
+      e,
+      (ev) => {
+        if (!dragging) {
+          if (Math.hypot(ev.clientX - startX, ev.clientY - startY) < 5) return;
+          dragging = true;
+          dnd.begin(paneId);
+          document.body.classList.add("pane-dragging");
+          showGhost(basename(cwdRef.current ?? "~"));
+        }
+        moveGhost(ev.clientX, ev.clientY);
+        target = computeDropTarget(ev.clientX, ev.clientY, paneId);
+        dnd.setDropTarget(target);
+      },
+      () => {
+        if (!dragging) return;
+        document.body.classList.remove("pane-dragging");
+        removeGhost();
+        dnd.end();
+        if (target) movePane(paneId, target);
+      }
+    );
+  };
 
   // Reveal the tools only when the pointer is near the active pane's top-right
   // corner. React bails out when the boolean is unchanged, so moving the mouse
@@ -112,20 +166,32 @@ export function TerminalPane({
 
   return (
     <div
-      className={`pane${active ? " pane-active" : ""}`}
+      className={`pane${active ? " pane-active" : ""}${
+        dnd.draggingPaneId === paneId ? " pane-drag-source" : ""
+      }`}
+      data-pane-id={paneId}
       onPointerDownCapture={onFocus}
       onPointerMove={active ? trackTools : undefined}
       onPointerLeave={active ? () => setShowTools(false) : undefined}
       onContextMenu={(e) => {
         e.preventDefault();
         onFocus();
-        onContextMenu(e.clientX, e.clientY);
+        onContextMenu(e.clientX, e.clientY, terminals.getHoveredLink() ?? undefined);
       }}
     >
-      <div className="pane-header" title={cwd ?? "~"}>{basename(cwd ?? "~")}</div>
+      <div
+        className="pane-header"
+        title={`${basename(cwd ?? "~")}  ·  drag to move this terminal`}
+        onPointerDown={startHeaderDrag}
+      >
+        {basename(cwd ?? "~")}
+      </div>
 
       {/* xterm's DOM is appended here by the manager (kept outside React). */}
       <div ref={ref} className="terminal-mount" />
+
+      {/* Drop indicator: the half this pane would give up to the dragged one. */}
+      {dropZone && <div className={`pane-drop-overlay zone-${dropZone}`} />}
 
       {/* Pane tools: maximize/restore + close. Hidden until the pointer reaches
           the top-right corner (or one gains keyboard focus). ⌘M / ⌘W mirror them. */}

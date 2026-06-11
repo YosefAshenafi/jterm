@@ -9,8 +9,9 @@ describe("load/save settings", () => {
   });
 
   it("round-trips through localStorage", () => {
-    saveSettings({ accent: "#e06c75", fontSize: 16, cursorBlink: false });
-    expect(loadSettings()).toEqual({ accent: "#e06c75", fontSize: 16, cursorBlink: false });
+    const custom = { ...DEFAULT_SETTINGS, accent: "#e06c75", fontSize: 16, cursorBlink: false };
+    saveSettings(custom);
+    expect(loadSettings()).toEqual(custom);
   });
 
   it("merges partial stored settings over the defaults", () => {

@@ -1,5 +1,6 @@
 import ReactDOM from "react-dom/client";
 import { StoreProvider } from "./state/store";
+import { PaneDndProvider } from "./state/paneDnd";
 import App from "./App";
 import "./styles.css";
 
@@ -8,6 +9,8 @@ import "./styles.css";
 // spawn duplicate shells, so we opt out here.
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <StoreProvider>
-    <App />
+    <PaneDndProvider>
+      <App />
+    </PaneDndProvider>
   </StoreProvider>
 );

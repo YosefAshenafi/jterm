@@ -22,6 +22,8 @@ interface Entry {
 /** Shared callbacks + controlled expansion state threaded through the tree. */
 interface ExplorerCtx {
   expanded: Set<string>;
+  /** Path of the file currently open in the editor (highlighted in the tree). */
+  activePath: string | null;
   toggle: (path: string) => void;
   onFile: (path: string) => void;
   onCd: (path: string) => void;
@@ -63,9 +65,10 @@ function DirChildren({ path, depth, ctx }: { path: string; depth: number; ctx: E
 
 function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: ExplorerCtx }) {
   if (!entry.is_dir) {
+    const active = entry.path === ctx.activePath;
     return (
       <button
-        className="tree-row"
+        className={`tree-row${active ? " tree-row-active" : ""}`}
         style={indentStyle(depth)}
         title={entry.path}
         // Act on click so Enter/Space work too; swallowing pointerdown keeps
@@ -105,13 +108,62 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
 /** File-tree view: click a file to open it, double-click a folder to `cd`,
  * single-click a folder to expand/collapse. "Collapse all" folds every folder. */
 export function ExplorerPanel() {
-  const { projectRoot, activePaneId, openFile } = useStore();
+  const { projectRoot, activePaneId, openFile, editor } = useStore();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
+  const activePath = editor.activePath;
+
+  // Reveal the active file like VS Code: expand the folders that lead to it.
+  useEffect(() => {
+    if (!activePath || !projectRoot) return;
+    const root = projectRoot.replace(/[\\/]+$/, "");
+    if (activePath !== root && !activePath.startsWith(root + "/")) return;
+    const parts = activePath.slice(root.length).replace(/^[\\/]+/, "").split("/");
+    parts.pop(); // drop the filename — only expand its directories
+    const ancestors: string[] = [];
+    let cur = root;
+    for (const p of parts) {
+      cur = `${cur}/${p}`;
+      ancestors.push(cur);
+    }
+    if (ancestors.length === 0) return;
+    setExpanded((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      ancestors.forEach((a) => {
+        if (!next.has(a)) {
+          next.add(a);
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [activePath, projectRoot]);
+
+  // Scroll the highlighted row into view once it (and its lazily-loaded parent
+  // folders) have rendered.
+  useEffect(() => {
+    if (!activePath) return;
+    let tries = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tryScroll = () => {
+      const el = document.querySelector(".tree-row-active");
+      if (el) {
+        (el as HTMLElement).scrollIntoView({ block: "nearest" });
+        return;
+      }
+      if (tries++ < 25) timer = setTimeout(tryScroll, 70);
+    };
+    tryScroll();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [activePath, expanded]);
 
   const ctx: ExplorerCtx = {
     expanded,
+    activePath,
     toggle: (path) =>
       setExpanded((prev) => {
         const next = new Set(prev);

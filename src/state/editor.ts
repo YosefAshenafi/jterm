@@ -15,6 +15,9 @@ export interface FileBuffer {
   error: string | null;
   /** True = render as a coloured diff view instead of a textarea. */
   diff: boolean;
+  /** Set for image files: rendered as a preview (`imageSrc` data URL) not text. */
+  image?: boolean;
+  imageSrc?: string;
 }
 
 export interface EditorState {
@@ -29,11 +32,14 @@ export type EditorAction =
   | { type: "open"; path: string; name: string }
   | { type: "open-diff"; path: string; name: string; content: string }
   | { type: "loaded"; path: string; text: string }
+  | { type: "image-loaded"; path: string; src: string }
   | { type: "edit"; path: string; draft: string }
   | { type: "saved"; path: string; text: string }
   | { type: "error"; path: string; error: string }
   | { type: "select"; path: string }
-  | { type: "close"; path: string };
+  | { type: "close"; path: string }
+  // Deselect every file → the workspace shows the Terminal tab (the grid).
+  | { type: "show-terminal" };
 
 /** A buffer is dirty once its draft diverges from the saved contents. */
 export function isDirty(f: FileBuffer): boolean {
@@ -94,6 +100,17 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         error: null,
         diff: false,
       });
+    case "image-loaded":
+      // `saved: ""` marks it loaded (not an error); images aren't editable.
+      return patch(state, action.path, {
+        saved: "",
+        draft: "",
+        loading: false,
+        error: null,
+        diff: false,
+        image: true,
+        imageSrc: action.src,
+      });
     case "edit":
       return patch(state, action.path, { draft: action.draft, error: null, diff: false });
     case "saved":
@@ -107,6 +124,8 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return state.files.some((f) => f.path === action.path)
         ? { ...state, activePath: action.path }
         : state;
+    case "show-terminal":
+      return state.activePath === null ? state : { ...state, activePath: null };
     case "close": {
       const idx = state.files.findIndex((f) => f.path === action.path);
       if (idx === -1) return state;

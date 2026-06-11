@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectLeaves,
   firstLeaf,
+  insertSplit,
   leafOrder,
   makeLeaf,
   removePane,
@@ -45,6 +46,47 @@ describe("splitPane", () => {
     const { root, newLeafId } = splitPane(target, target.id, "column", sibling);
     expect(newLeafId).toBe(sibling.id);
     expect((root as SplitNode).children[1]).toBe(sibling);
+  });
+});
+
+describe("insertSplit", () => {
+  it("drops the new pane on the leading side when `before` is true", () => {
+    const a = makeLeaf();
+    const dropped = makeLeaf();
+    const root = insertSplit(a, a.id, dropped, "row", true) as SplitNode;
+
+    expect(root.type).toBe("split");
+    expect(root.direction).toBe("row");
+    expect(root.children[0]).toBe(dropped); // before => first
+    expect(root.children[1]).toBe(a);
+    expect(leafOrder(root)).toEqual([dropped.id, a.id]);
+  });
+
+  it("drops the new pane on the trailing side when `before` is false", () => {
+    const a = makeLeaf();
+    const dropped = makeLeaf();
+    const root = insertSplit(a, a.id, dropped, "column", false) as SplitNode;
+
+    expect(root.direction).toBe("column");
+    expect(root.children[0]).toBe(a);
+    expect(root.children[1]).toBe(dropped);
+  });
+
+  it("only wraps the targeted leaf in a nested tree", () => {
+    const a = makeLeaf();
+    const { root: r1, newLeafId: b } = splitPane(a, a.id, "row");
+    const dropped = makeLeaf();
+    const after = insertSplit(r1, b, dropped, "column", false);
+
+    expect(leafOrder(after)).toEqual([a.id, b, dropped.id]);
+    // The untouched sibling subtree is reused by reference.
+    expect((after as SplitNode).children[0]).toBe(a);
+  });
+
+  it("leaves the tree unchanged when the target id is absent", () => {
+    const a = makeLeaf();
+    const after = insertSplit(a, "nope", makeLeaf(), "row", true);
+    expect(after).toBe(a);
   });
 });
 

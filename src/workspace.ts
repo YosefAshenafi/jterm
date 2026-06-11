@@ -20,6 +20,28 @@ export function dirname(p: string): string {
   return idx <= 0 ? "" : trimmed.slice(0, idx);
 }
 
+const IMAGE_MIME: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  jfif: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  svg: "image/svg+xml",
+  avif: "image/avif",
+  apng: "image/apng",
+};
+
+/** MIME type for a path's image extension, or null when it isn't an image we
+ * preview. Drives whether the editor renders a picture instead of text. */
+export function imageMime(path: string): string | null {
+  const dot = path.lastIndexOf(".");
+  if (dot < 0) return null;
+  return IMAGE_MIME[path.slice(dot + 1).toLowerCase()] ?? null;
+}
+
 /** A pane's shell working directory, falling back to the home directory. Used to
  * seed the project folder shown in the sidebar / searched / git-managed. */
 export async function resolveCwd(paneId: string | null): Promise<string> {

@@ -50,6 +50,27 @@ export function splitPane(
   return { root: rec(root), newLeafId: newLeaf.id };
 }
 
+/** Wrap `targetId` in a new split alongside `newLeaf`, placed on the `before`
+ * side (true => new pane first/left/top). Used by drag-and-drop to drop a pane
+ * onto a chosen edge of another pane. */
+export function insertSplit(
+  root: PaneNode,
+  targetId: string,
+  newLeaf: LeafNode,
+  direction: Direction,
+  before: boolean
+): PaneNode {
+  const rec = (node: PaneNode): PaneNode => {
+    if (node.type === "leaf") {
+      if (node.id !== targetId) return node;
+      const children: [PaneNode, PaneNode] = before ? [newLeaf, node] : [node, newLeaf];
+      return { type: "split", id: newId("split"), direction, children, sizes: [0.5, 0.5] };
+    }
+    return { ...node, children: [rec(node.children[0]), rec(node.children[1])] };
+  };
+  return rec(root);
+}
+
 /** Remove a leaf; collapse any split left with a single child. Returns null if
  * the whole tree is emptied. */
 export function removePane(root: PaneNode, targetId: string): PaneNode | null {

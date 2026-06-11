@@ -9,6 +9,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -19,10 +20,11 @@ import {
   saveSettings,
   Settings,
 } from "./settings";
-import { AppState, Direction, LeafNode, Tab } from "./types";
+import { AppState, Direction, LeafNode, PaneNode, Tab } from "./types";
 import {
   collectLeaves,
   firstLeaf,
+  insertSplit,
   leafOrder,
   makeLeaf,
   newId,
@@ -30,6 +32,7 @@ import {
   setSplitSizes,
   splitPane,
 } from "./tree";
+import { DropTarget, DropZone } from "./paneDnd";
 import { EditorState, editorReducer, emptyEditor, isDirty } from "./editor";
 import { basename, resolveCwd } from "../workspace";
 import { homeDir } from "@tauri-apps/api/path";
@@ -106,7 +109,8 @@ type Action =
   | { type: "cycle-pane"; delta: number }
   | { type: "resize-split"; tabId: string; splitId: string; sizes: [number, number] }
   | { type: "set-title"; tabId: string; title: string }
-  | { type: "rename-tab"; tabId: string; title: string };
+  | { type: "rename-tab"; tabId: string; title: string }
+  | { type: "move-pane"; paneId: string; target: DropTarget };
 
 const activeTab = (s: AppState): Tab | undefined =>
   s.tabs.find((t) => t.id === s.activeTabId);
@@ -116,6 +120,30 @@ function updateTab(s: AppState, tabId: string, patch: Partial<Tab>): AppState {
     ...s,
     tabs: s.tabs.map((t) => (t.id === tabId ? { ...t, ...patch } : t)),
   };
+}
+
+/** Which split a drop zone produces: `before` puts the dropped pane first. */
+function zoneToSplit(zone: DropZone): { direction: Direction; before: boolean } {
+  switch (zone) {
+    case "left": return { direction: "row", before: true };
+    case "right": return { direction: "row", before: false };
+    case "top": return { direction: "column", before: true };
+    case "bottom": return { direction: "column", before: false };
+  }
+}
+
+/** Re-validate a tab against a rewritten root: keep the active/zoomed panes if
+ * they still exist (preferring `preferActive`), else fall back sensibly. */
+function rebindTab(tab: Tab, root: PaneNode, preferActive?: string): Partial<Tab> {
+  const leaves = collectLeaves(root);
+  const has = (id: string | undefined | null) => !!id && leaves.some((l) => l.id === id);
+  const activePaneId = has(preferActive)
+    ? (preferActive as string)
+    : has(tab.activePaneId)
+    ? tab.activePaneId
+    : firstLeaf(root).id;
+  const zoomedPaneId = has(tab.zoomedPaneId) ? tab.zoomedPaneId : null;
+  return { root, activePaneId, zoomedPaneId };
 }
 
 function closeTab(s: AppState, tabId: string): AppState {
@@ -218,6 +246,55 @@ function reducer(state: AppState, action: Action): AppState {
         titleManual: true,
       });
     }
+    case "move-pane": {
+      const { paneId, target } = action;
+      const src = state.tabs.find((t) =>
+        collectLeaves(t.root).some((l) => l.id === paneId)
+      );
+      if (!src) return state;
+      const leaf: LeafNode = { type: "leaf", id: paneId };
+
+      if (target.kind === "pane") {
+        // Rearrange within the visible tab: drop on an edge of another pane.
+        if (target.paneId === paneId) return state;
+        const inSrc = collectLeaves(src.root).some((l) => l.id === target.paneId);
+        if (!inSrc) return state; // only the on-screen tab's panes are targetable
+        const removed = removePane(src.root, paneId);
+        if (!removed) return state; // target keeps the tree non-empty
+        const { direction, before } = zoneToSplit(target.zone);
+        const root = insertSplit(removed, target.paneId, leaf, direction, before);
+        return updateTab(state, src.id, { root, activePaneId: paneId, zoomedPaneId: null });
+      }
+
+      if (target.kind === "tab") {
+        if (target.tabId === src.id) return state; // already lives here
+        const dest = state.tabs.find((t) => t.id === target.tabId);
+        if (!dest) return state;
+        const destRoot = insertSplit(dest.root, dest.activePaneId, leaf, "row", false);
+        const srcRoot = removePane(src.root, paneId);
+        let tabs = state.tabs.map((t) => {
+          if (t.id === dest.id) return { ...t, ...rebindTab(dest, destRoot, paneId), zoomedPaneId: null };
+          if (t.id === src.id && srcRoot) return { ...t, ...rebindTab(src, srcRoot) };
+          return t;
+        });
+        if (!srcRoot) tabs = tabs.filter((t) => t.id !== src.id); // source emptied
+        return { tabs, activeTabId: dest.id };
+      }
+
+      // new-tab: detach into a fresh tab (no-op if it is the tab's only pane).
+      const srcRoot = removePane(src.root, paneId);
+      if (!srcRoot) return state;
+      const newTab: Tab = {
+        id: newId("tab"),
+        title: "Terminal",
+        root: leaf,
+        activePaneId: paneId,
+      };
+      const tabs = state.tabs.map((t) =>
+        t.id === src.id ? { ...t, ...rebindTab(src, srcRoot) } : t
+      );
+      return { tabs: [...tabs, newTab], activeTabId: newTab.id };
+    }
     default:
       return state;
   }
@@ -254,6 +331,19 @@ interface StoreApi {
   resizeSplit(tabId: string, splitId: string, sizes: [number, number]): void;
   setTitle(tabId: string, title: string): void;
   renameTab(tabId: string, title: string): void;
+  /** Move a pane to a drop target (another pane's edge, a tab, or a new tab). */
+  movePane(paneId: string, target: DropTarget): void;
+  // Bottom terminal panel (⌘J): VS Code-style, with its own tabs of terminals.
+  panelOpen: boolean;
+  /** Pane ids of the terminals living in the bottom panel, in tab order. */
+  panelTerminals: string[];
+  activePanelTerminal: string | null;
+  togglePanel(): void;
+  closePanel(): void;
+  /** Add a new terminal tab to the panel (⌘⇧J / the + button). */
+  addPanelTerminal(): void;
+  closePanelTerminal(id: string): void;
+  selectPanelTerminal(id: string): void;
   // User settings (appearance, terminal prefs).
   settings: Settings;
   updateSettings(patch: Partial<Settings>): void;
@@ -261,8 +351,25 @@ interface StoreApi {
   editor: EditorState;
   focusRegion: FocusRegion;
   setFocusRegion(region: FocusRegion): void;
+  /** Switch the workspace to the Terminal tab (the split grid). */
+  showTerminalView(): void;
   /** Open a file in the editor; pass `line` (1-based) to reveal/select it. */
   openFile(path: string, line?: number): void;
+  // VS Code-style quick-open / go-to-line palette and the find bar.
+  paletteMode: "files" | "goto" | null;
+  openQuickFiles(): void;
+  openGoToLine(): void;
+  closePalette(): void;
+  /** Reveal/select a 1-based line in the active file. */
+  goToLine(line: number): void;
+  findOpen: boolean;
+  openFind(): void;
+  closeFind(): void;
+  /** Download an http(s) URL to the Downloads folder (terminal links). */
+  downloadUrl(url: string): void;
+  /** Transient status message (e.g. download result); null when hidden. */
+  toast: string | null;
+  dismissToast(): void;
   /** Open a diff view for a git file. */
   openDiffView(path: string, content: string): void;
   /** Number of changed files shown as a badge on the git icon. */
@@ -274,6 +381,7 @@ interface StoreApi {
   selectFile(path: string): void;
   setFileDraft(path: string, draft: string): void;
   markFileLoaded(path: string, text: string): void;
+  markFileImage(path: string, src: string): void;
   markFileError(path: string, error: string): void;
   saveFile(path: string): Promise<void>;
   saveActiveFile(): Promise<void>;
@@ -294,6 +402,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [focusRegion, setFocusRegion] = useState<FocusRegion>("terminal");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [gitChangesCount, setGitChangesCount] = useState(0);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTerminals, setPanelTerminals] = useState<string[]>([]);
+  const [activePanelTerminal, setActivePanelTerminal] = useState<string | null>(null);
+  const [paletteMode, setPaletteMode] = useState<"files" | "goto" | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashToast = (msg: string) => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
+  };
 
   // Apply settings to the document (CSS variables) and live terminals, and
   // persist them. Runs on mount so a saved accent/font is restored at startup.
@@ -301,10 +421,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     root.style.setProperty("--accent", settings.accent);
     root.style.setProperty("--pane-border", hexToRgba(settings.accent, 0.5));
+    root.style.setProperty("--accent-soft", hexToRgba(settings.accent, 0.18));
     terminals.setPrefs({
       accent: settings.accent,
+      fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
+      lineHeight: settings.lineHeight,
+      cursorStyle: settings.cursorStyle,
       cursorBlink: settings.cursorBlink,
+      scrollback: settings.scrollback,
     });
     saveSettings(settings);
   }, [settings]);
@@ -375,8 +500,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setProjectRootMap((prev) => ({ ...prev, [tabId]: h }));
       },
       closeTab: (tabId) => dispatch({ type: "close-tab", tabId }),
-      selectTab: (tabId) => dispatch({ type: "select-tab", tabId }),
-      selectTabIndex: (index) => dispatch({ type: "select-tab-index", index }),
+      // Switching terminal workspaces also brings the Terminal tab forward, so a
+      // top-tab click always lands you on terminals (not whatever file you last
+      // viewed). Same for the index shortcut.
+      selectTab: (tabId) => {
+        editorDispatch({ type: "show-terminal" });
+        setFocusRegion("terminal");
+        dispatch({ type: "select-tab", tabId });
+      },
+      selectTabIndex: (index) => {
+        editorDispatch({ type: "show-terminal" });
+        setFocusRegion("terminal");
+        dispatch({ type: "select-tab-index", index });
+      },
       split: (direction) => {
         const tab = state.tabs.find((t) => t.id === state.activeTabId);
         if (!tab) return;
@@ -412,6 +548,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "resize-split", tabId, splitId, sizes }),
       setTitle: (tabId, title) => dispatch({ type: "set-title", tabId, title }),
       renameTab: (tabId, title) => dispatch({ type: "rename-tab", tabId, title }),
+      movePane: (paneId, target) => dispatch({ type: "move-pane", paneId, target }),
+      panelOpen,
+      panelTerminals,
+      activePanelTerminal,
+      togglePanel: () => {
+        const willOpen = !panelOpen;
+        // Opening an empty panel spawns its first terminal in the active
+        // terminal's directory so README commands run where the project lives.
+        if (willOpen && panelTerminals.length === 0) {
+          const id = newId("panel");
+          terminals.setSpawnCwd(id, resolveCwd(activePaneId));
+          setPanelTerminals([id]);
+          setActivePanelTerminal(id);
+        }
+        setPanelOpen(willOpen);
+      },
+      closePanel: () => setPanelOpen(false),
+      addPanelTerminal: () => {
+        const id = newId("panel");
+        terminals.setSpawnCwd(id, resolveCwd(activePaneId));
+        setPanelTerminals((prev) => [...prev, id]);
+        setActivePanelTerminal(id);
+        setPanelOpen(true);
+      },
+      closePanelTerminal: (id) => {
+        const idx = panelTerminals.indexOf(id);
+        if (idx === -1) return;
+        const next = panelTerminals.filter((x) => x !== id);
+        setPanelTerminals(next);
+        if (activePanelTerminal === id) {
+          setActivePanelTerminal(next.length ? next[Math.min(idx, next.length - 1)] : null);
+        }
+        if (next.length === 0) setPanelOpen(false);
+        terminals.disposePane(id);
+      },
+      selectPanelTerminal: (id) => {
+        setActivePanelTerminal(id);
+        terminals.focus(id);
+      },
 
       settings,
       updateSettings: (patch) => setSettings((s) => ({ ...s, ...patch })),
@@ -425,11 +600,49 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       gitChangesCount,
       setGitChangesCount,
+      showTerminalView: () => {
+        editorDispatch({ type: "show-terminal" });
+        setFocusRegion("terminal");
+        if (activePaneId) terminals.focus(activePaneId);
+      },
       openFile: (path, line) => {
         editorDispatch({ type: "open", path, name: basename(path) });
         setFocusRegion("editor");
         if (line != null) setReveal({ path, line });
       },
+      paletteMode,
+      openQuickFiles: () => {
+        // Ensure the active tab has a resolved project root for the picker.
+        if (!projectRootMap[activeTabId]) {
+          resolveCwd(activePaneId).then((cwd) =>
+            setProjectRootMap((prev) => ({ ...prev, [activeTabId]: cwd }))
+          );
+        }
+        setPaletteMode("files");
+      },
+      openGoToLine: () => {
+        if (editor.activePath) setPaletteMode("goto");
+      },
+      closePalette: () => setPaletteMode(null),
+      goToLine: (line) => {
+        if (editor.activePath) {
+          setReveal({ path: editor.activePath, line });
+          setFocusRegion("editor");
+        }
+      },
+      findOpen,
+      openFind: () => {
+        if (editor.activePath) setFindOpen(true);
+      },
+      closeFind: () => setFindOpen(false),
+      downloadUrl: (url) => {
+        flashToast("Downloading…");
+        invoke<string>("download_url", { url })
+          .then((path) => flashToast(`Downloaded · ${basename(path)}`))
+          .catch((e) => flashToast(`Download failed: ${e}`));
+      },
+      toast,
+      dismissToast: () => setToast(null),
       reveal,
       clearReveal: () => setReveal(null),
       selectFile: (path) => {
@@ -438,6 +651,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       setFileDraft: (path, draft) => editorDispatch({ type: "edit", path, draft }),
       markFileLoaded: (path, text) => editorDispatch({ type: "loaded", path, text }),
+      markFileImage: (path, src) => editorDispatch({ type: "image-loaded", path, src }),
       markFileError: (path, error) => editorDispatch({ type: "error", path, error }),
       saveFile: async (path) => {
         const f = editor.files.find((x) => x.path === path);
@@ -489,6 +703,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       settings,
       gitChangesCount,
       setGitChangesCount,
+      panelOpen,
+      panelTerminals,
+      activePanelTerminal,
+      paletteMode,
+      findOpen,
+      toast,
     ]
   );
 
