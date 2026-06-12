@@ -19,6 +19,46 @@ import { FindBar } from "./FindBar";
 const isMac =
   /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
 
+// Monospace char width, cached per resolved font (for mapping a mouse point to
+// a text offset in the editor).
+let charWidthCache: { font: string; w: number } | null = null;
+function measureCharWidth(font: string): number {
+  if (charWidthCache?.font === font) return charWidthCache.w;
+  const ctx = document.createElement("canvas").getContext("2d");
+  const w = ctx ? (() => { ctx.font = font; return ctx.measureText("0".repeat(20)).width / 20; })() : 8;
+  charWidthCache = { font, w };
+  return w;
+}
+
+/** Character offset in a (monospace) textarea under a screen point, or -1. */
+function editorOffsetAt(ta: HTMLTextAreaElement, clientX: number, clientY: number): number {
+  const rect = ta.getBoundingClientRect();
+  const cs = getComputedStyle(ta);
+  const padL = parseFloat(cs.paddingLeft) || 0;
+  const padT = parseFloat(cs.paddingTop) || 0;
+  const lineH = parseFloat(cs.lineHeight) || 18;
+  const cw = measureCharWidth(`${cs.fontSize} ${cs.fontFamily}`);
+  const row = Math.floor((clientY - rect.top - padT + ta.scrollTop) / lineH);
+  const col = Math.max(0, Math.round((clientX - rect.left - padL + ta.scrollLeft) / cw));
+  const lines = ta.value.split("\n");
+  if (row < 0 || row >= lines.length) return -1;
+  let off = 0;
+  for (let i = 0; i < row; i++) off += lines[i].length + 1;
+  return off + Math.min(col, lines[row].length);
+}
+
+/** The http(s) URL surrounding character offset `pos`, or null. Used so ⌘-click
+ * in the editor can open a link. */
+function urlAt(text: string, pos: number): string | null {
+  const boundary = (c: string) => /[\s"'`<>()[\]{}]/.test(c);
+  let start = pos;
+  while (start > 0 && !boundary(text[start - 1])) start--;
+  let end = pos;
+  while (end < text.length && !boundary(text[end])) end++;
+  const token = text.slice(start, end).replace(/[.,;:]+$/, ""); // drop trailing punctuation
+  return /^https?:\/\/\S+$/i.test(token) ? token : null;
+}
+
 /**
  * The main content area to the right of the folder tree: one tab strip holding a
  * single Terminal tab (the split-pane grid) plus one tab per open file, with the
@@ -31,6 +71,10 @@ export function WorkArea() {
   const { state, editor } = store;
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [panelHeight, setPanelHeight] = useState(260);
+  // Tooltip shown while hovering a link in the editor (telling the user the
+  // ⌘/Ctrl-click shortcut). Position is captured when a link is first hovered.
+  const [linkHint, setLinkHint] = useState<{ x: number; y: number } | null>(null);
+  const hintUrlRef = useRef<string | null>(null);
   const requested = useRef<Set<string>>(new Set());
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -102,6 +146,17 @@ export function WorkArea() {
   useEffect(() => {
     if (editing && store.focusRegion === "editor") taRef.current?.focus();
   }, [editor.activePath, editing, store.focusRegion]);
+
+  // Releasing ⌘/Ctrl clears the link pointer even without moving the mouse.
+  useEffect(() => {
+    const onKeyUp = (e: KeyboardEvent) => {
+      if ((e.key === "Meta" || e.key === "Control") && taRef.current) {
+        taRef.current.style.cursor = "";
+      }
+    };
+    window.addEventListener("keyup", onKeyUp);
+    return () => window.removeEventListener("keyup", onKeyUp);
+  }, []);
 
   // Reveal a line requested from search: once the target file is loaded and
   // active, select that line and scroll it into view, then clear the request.
@@ -414,6 +469,38 @@ export function WorkArea() {
                       onChange={onEditorChange}
                       onScroll={syncScroll}
                       onKeyDown={onKeyDown}
+                      onClick={(e) => {
+                        // ⌘/Ctrl-click a URL to open it in the browser.
+                        if (!(e.metaKey || e.ctrlKey)) return;
+                        const url = urlAt(e.currentTarget.value, e.currentTarget.selectionStart);
+                        if (url) {
+                          e.preventDefault();
+                          void openUrl(url);
+                        }
+                      }}
+                      onMouseMove={(e) => {
+                        const ta = e.currentTarget;
+                        if (ta.value.length > 100000) return;
+                        const off = editorOffsetAt(ta, e.clientX, e.clientY);
+                        const url = off >= 0 ? urlAt(ta.value, off) : null;
+                        // Pointer only while the open-modifier is held (like VS Code).
+                        ta.style.cursor = url && (e.metaKey || e.ctrlKey) ? "pointer" : "";
+                        // Tooltip on any hover, so the shortcut is discoverable.
+                        if (url) {
+                          if (hintUrlRef.current !== url) {
+                            hintUrlRef.current = url;
+                            setLinkHint({ x: e.clientX, y: e.clientY });
+                          }
+                        } else if (hintUrlRef.current !== null) {
+                          hintUrlRef.current = null;
+                          setLinkHint(null);
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.cursor = "";
+                        hintUrlRef.current = null;
+                        setLinkHint(null);
+                      }}
                       onFocus={() => store.setFocusRegion("editor")}
                     />
                   </div>
@@ -436,6 +523,11 @@ export function WorkArea() {
                   taRef.current?.focus();
                 }}
               />
+            )}
+            {linkHint && (
+              <div className="link-hint" style={{ left: linkHint.x, top: linkHint.y }}>
+                {isMac ? "⌘" : "Ctrl"} + click to open link
+              </div>
             )}
           </div>
         )}

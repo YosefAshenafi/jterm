@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { useStore } from "../state/store";
 import { SidebarView } from "../state/store";
-import { ExplorerIcon, GitBranchIcon, SearchIcon } from "./icons";
+import { ExplorerIcon, GitBranchIcon, PinIcon, SearchIcon } from "./icons";
 
 const ITEMS: { view: SidebarView; label: string; icon: ReactNode }[] = [
   { view: "explorer", label: "Explorer", icon: <ExplorerIcon /> },
@@ -12,7 +12,15 @@ const ITEMS: { view: SidebarView; label: string; icon: ReactNode }[] = [
 /** Vertical icon rail that switches the sidebar between Explorer / Search /
  * Source Control. Re-clicking the search icon refocuses its input. */
 export function ActivityBar() {
-  const { sidebarView, openSidebarView, gitChangesCount } = useStore();
+  const { sidebarView, openSidebarView, gitChangesCount, sidebarOpen, setSidebarOpen, setSidebarPeek } =
+    useStore();
+  const togglePin = () => {
+    if (sidebarOpen) setSidebarOpen(false);
+    else {
+      setSidebarOpen(true);
+      setSidebarPeek(false);
+    }
+  };
   return (
     <div className="activity-bar">
       {ITEMS.map((it) => (
@@ -31,6 +39,16 @@ export function ActivityBar() {
           )}
         </button>
       ))}
+      <button
+        className={`activity-btn activity-pin${sidebarOpen ? " active" : ""}`}
+        title={sidebarOpen ? "Unpin sidebar (auto-hide)" : "Pin sidebar open"}
+        aria-label={sidebarOpen ? "Unpin sidebar" : "Pin sidebar open"}
+        aria-pressed={sidebarOpen}
+        onPointerDown={(e) => e.preventDefault()}
+        onClick={togglePin}
+      >
+        <PinIcon />
+      </button>
     </div>
   );
 }

@@ -206,7 +206,14 @@ export default function App() {
       </div>
       <Toolbar />
       <div className="main">
-        {store.sidebarOpen && <Sidebar />}
+        {/* Hover the left edge to peek the sidebar when it isn't pinned open. */}
+        {!store.sidebarOpen && (
+          <div
+            className="sidebar-hover-zone"
+            onMouseEnter={() => store.setSidebarPeek(true)}
+          />
+        )}
+        {(store.sidebarOpen || store.sidebarPeek) && <Sidebar />}
         <WorkArea />
       </div>
       <CommandPalette />

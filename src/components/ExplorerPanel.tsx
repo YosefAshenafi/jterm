@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { useStore } from "../state/store";
 import { terminals } from "../terminal/manager";
-import { basename, shellQuote } from "../workspace";
+import { basename, resolveCwd, shellQuote } from "../workspace";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import {
   ChevronIcon,
@@ -112,17 +112,34 @@ export function ExplorerPanel() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
+  const [fallbackRoot, setFallbackRoot] = useState<string | null>(null);
   const activePath = editor.activePath;
+
+  // Until the store has a project root (e.g. the sidebar was just peeked open),
+  // scope the tree to the active terminal's working directory so it shows the
+  // current folder rather than "No folder open".
+  useEffect(() => {
+    if (projectRoot) {
+      setFallbackRoot(null);
+      return;
+    }
+    let alive = true;
+    resolveCwd(activePaneId).then((cwd) => alive && setFallbackRoot(cwd));
+    return () => {
+      alive = false;
+    };
+  }, [projectRoot, activePaneId]);
+  const root = projectRoot ?? fallbackRoot;
 
   // Reveal the active file like VS Code: expand the folders that lead to it.
   useEffect(() => {
-    if (!activePath || !projectRoot) return;
-    const root = projectRoot.replace(/[\\/]+$/, "");
-    if (activePath !== root && !activePath.startsWith(root + "/")) return;
-    const parts = activePath.slice(root.length).replace(/^[\\/]+/, "").split("/");
+    if (!activePath || !root) return;
+    const base = root.replace(/[\\/]+$/, "");
+    if (activePath !== base && !activePath.startsWith(base + "/")) return;
+    const parts = activePath.slice(base.length).replace(/^[\\/]+/, "").split("/");
     parts.pop(); // drop the filename — only expand its directories
     const ancestors: string[] = [];
-    let cur = root;
+    let cur = base;
     for (const p of parts) {
       cur = `${cur}/${p}`;
       ancestors.push(cur);
@@ -139,7 +156,7 @@ export function ExplorerPanel() {
       });
       return changed ? next : prev;
     });
-  }, [activePath, projectRoot]);
+  }, [activePath, root]);
 
   // Scroll the highlighted row into view once it (and its lazily-loaded parent
   // folders) have rendered.
@@ -203,7 +220,9 @@ export function ExplorerPanel() {
   return (
     <div className="panel">
       <div className="panel-header">
-        <span className="panel-title">{projectRoot ? basename(projectRoot) : "Explorer"}</span>
+        <span className="panel-title" title={root ?? undefined}>
+          {root ? basename(root) : "Explorer"}
+        </span>
         <div className="panel-actions">
           <button
             className="tool-btn icon-btn small"
@@ -227,10 +246,10 @@ export function ExplorerPanel() {
         </div>
       </div>
       <div className="panel-body">
-        {projectRoot ? (
-          <DirChildren key={`${projectRoot}:${refreshKey}`} path={projectRoot} depth={0} ctx={ctx} />
+        {root ? (
+          <DirChildren key={`${root}:${refreshKey}`} path={root} depth={0} ctx={ctx} />
         ) : (
-          <div className="tree-note">No folder open</div>
+          <div className="tree-note">Resolving folder…</div>
         )}
       </div>
       {menu && (

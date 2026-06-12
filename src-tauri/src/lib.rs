@@ -767,13 +767,17 @@ async fn git_push(path: String) -> Result<String, String> {
 #[tauri::command]
 async fn git_discard(path: String, file: String) -> Result<(), String> {
     blocking(move || {
-        // First try git checkout -- <file> (handles modified/deleted tracked files)
+        // Fully revert the file regardless of its staged state, so it leaves the
+        // changes list entirely (matching VS Code's Discard): unstage it first,
+        // then restore it from HEAD; a brand-new file (no HEAD version) is deleted.
+        let _ = run_git(&path, &["reset", "-q", "HEAD", "--", &file]);
         match run_git(&path, &["checkout", "--", &file]) {
             Ok(_) => Ok(()),
             Err(_) => {
-                // Untracked file — delete from disk
                 let full = std::path::Path::new(&path).join(&file);
-                std::fs::remove_file(&full).map_err(|e| format!("failed to discard: {e}"))
+                std::fs::remove_file(&full)
+                    .or_else(|_| std::fs::remove_dir_all(&full))
+                    .map_err(|e| format!("failed to discard: {e}"))
             }
         }
     })

@@ -326,6 +326,37 @@ body {
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  position: relative;
+}
+
+/* Thin strip on the left edge that reveals the sidebar on hover (when unpinned). */
+.sidebar-hover-zone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  z-index: 30;
+}
+.sidebar-hover-zone:hover {
+  background: linear-gradient(to right, var(--accent-soft), transparent);
+}
+/* The sidebar floating over the content while peeked (vs. pinned in-flow). */
+.sidebar-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 50;
+  box-shadow: 6px 0 24px rgba(0, 0, 0, 0.45);
+  animation: sidebar-peek-in 0.14s ease both;
+}
+@keyframes sidebar-peek-in {
+  from { transform: translateX(-8px); opacity: 0.4; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.activity-pin {
+  margin-top: auto;
 }
 
 /* ---- Sidebar: activity rail + view panel ---- */
@@ -1372,6 +1403,24 @@ body {
 .tok-number { color: #d19a66; }
 .tok-keyword { color: #c678dd; }
 .tok-type { color: #e5c07b; }
+/* URLs — blue + underline so they read as links (⌘-click to open). */
+.tok-link { color: #4dacff; text-decoration: underline; }
+
+/* Hover tooltip telling the user how to open an editor link. */
+.link-hint {
+  position: fixed;
+  z-index: 250;
+  transform: translate(-50%, calc(-100% - 10px));
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+  font-size: 11.5px;
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 .editor-status {
   display: flex;
@@ -2238,6 +2287,35 @@ body.pane-dragging * {
 }
 .btn-primary:hover {
   filter: brightness(1.08);
+}
+.btn-danger {
+  background: #c0454b;
+  color: #fff;
+  font-weight: 600;
+}
+.btn-danger:hover {
+  filter: brightness(1.1);
+}
+
+/* ---- Confirm dialog (rollback / discard permission) ---- */
+.modal-confirm {
+  width: min(420px, 92vw);
+}
+.confirm-body {
+  padding: 20px 20px 8px;
+}
+.confirm-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.confirm-message {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.confirm-footer {
+  border-top: none;
 }
 
 /* ---- Command palette (⌘P quick-open / ⌘G go-to-line) ---- */
