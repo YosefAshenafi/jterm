@@ -117,20 +117,41 @@ function tokenizer(key: keyof typeof SPECS): RegExp {
 
   const never = "(?!x)x"; // matches nothing, keeps group numbering stable
   const source =
-    "(" + (comment.length ? comment.join("|") : never) + ")" + // 1: comment
-    "|(" + (strings.length ? strings.join("|") : never) + ")" + // 2: string
-    "|(0[xX][0-9a-fA-F]+|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" + // 3: number
-    "|([A-Za-z_$][\\w$]*)"; // 4: identifier
+    "(" + URL_SRC + ")" + // 1: url
+    "|(" + (comment.length ? comment.join("|") : never) + ")" + // 2: comment
+    "|(" + (strings.length ? strings.join("|") : never) + ")" + // 3: string
+    "|(0[xX][0-9a-fA-F]+|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" + // 4: number
+    "|([A-Za-z_$][\\w$]*)"; // 5: identifier
 
   const re = new RegExp(source, "g");
   regexCache.set(key, re);
   return re;
 }
 
+// http(s) URLs, stopping before trailing punctuation / closing brackets so they
+// read as links. Used to color links blue in both code and plain text.
+const URL_SRC = "https?:\\/\\/[^\\s\"'`<>)\\]}]+";
+
+function highlightUrlsOnly(code: string): string {
+  const re = new RegExp(URL_SRC, "gi");
+  let out = "";
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) {
+    if (m.index > last) out += htmlEscape(code.slice(last, m.index));
+    out += `<span class="tok-link">${htmlEscape(m[0])}</span>`;
+    last = m.index + m[0].length;
+  }
+  out += htmlEscape(code.slice(last));
+  return out + "\n";
+}
+
 /** Highlight `code` to an HTML string of <span class="tok-…"> tokens. */
 export function highlightToHtml(code: string, key: keyof typeof SPECS): string {
   const spec = SPECS[key];
-  if (key === "plain" || code.length > MAX_HIGHLIGHT) return htmlEscape(code) + "\n";
+  if (code.length > MAX_HIGHLIGHT) return htmlEscape(code) + "\n";
+  // Plain text still gets links colored (so URLs in .md/.txt are clickable-blue).
+  if (key === "plain") return highlightUrlsOnly(code);
 
   const re = tokenizer(key);
   const keywords = spec.keywords;
@@ -140,8 +161,9 @@ export function highlightToHtml(code: string, key: keyof typeof SPECS): string {
   let m: RegExpExecArray | null;
   while ((m = re.exec(code)) !== null) {
     if (m.index > last) out += htmlEscape(code.slice(last, m.index));
-    const [full, comment, str, num, ident] = m;
-    if (comment !== undefined) out += `<span class="tok-comment">${htmlEscape(comment)}</span>`;
+    const [full, url, comment, str, num, ident] = m;
+    if (url !== undefined) out += `<span class="tok-link">${htmlEscape(url)}</span>`;
+    else if (comment !== undefined) out += `<span class="tok-comment">${htmlEscape(comment)}</span>`;
     else if (str !== undefined) out += `<span class="tok-string">${htmlEscape(str)}</span>`;
     else if (num !== undefined) out += `<span class="tok-number">${num}</span>`;
     else if (ident !== undefined) {

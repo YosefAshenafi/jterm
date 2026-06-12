@@ -52,6 +52,15 @@ export interface RevealTarget {
 
 const SNAPSHOT_KEY = "jterm_tab_titles";
 
+const SIDEBAR_WIDTH_KEY = "jterm.sidebarWidth";
+const SIDEBAR_MIN = 180;
+const SIDEBAR_MAX = 560;
+/** Persisted sidebar width, so toggling it open restores the last size. */
+function loadSidebarWidth(): number {
+  const v = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  return v >= SIDEBAR_MIN && v <= SIDEBAR_MAX ? v : 272;
+}
+
 interface TabSnapshot {
   title: string;
   titleManual?: boolean;
@@ -308,6 +317,12 @@ interface StoreApi {
   activePaneId: string | null;
   // Project workspace (toolbar + sidebar).
   sidebarOpen: boolean;
+  /** Sidebar is temporarily revealed by hovering the left edge (not pinned). */
+  sidebarPeek: boolean;
+  setSidebarPeek(v: boolean): void;
+  /** Remembered sidebar width (persists across toggles and restarts). */
+  sidebarWidth: number;
+  setSidebarWidth(w: number): void;
   projectRoot: string | null;
   sidebarView: SidebarView;
   /** Bumped each time the search view is (re)opened, so its input can refocus. */
@@ -397,6 +412,8 @@ const StoreContext = createContext<StoreApi | null>(null);
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarPeek, setSidebarPeek] = useState(false);
+  const [sidebarWidth, setSidebarWidthState] = useState<number>(loadSidebarWidth);
   const [projectRootMap, setProjectRootMap] = useState<Record<string, string | null>>({});
   const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
   const [searchNonce, setSearchNonce] = useState(0);
@@ -442,14 +459,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     state.tabs.find((t) => t.id === activeTabId)?.activePaneId ?? null;
   const projectRoot = projectRootMap[activeTabId] ?? null;
 
-  // Per-tab project root: sync the active pane's CWD into the current tab's
-  // entry whenever the sidebar is open. The effect fires on tab switch too.
+  // Per-tab project root: track the active pane's CWD while the sidebar is open
+  // so the file tree (and search/git) scope to the current folder. Polled so a
+  // `cd` in the terminal re-scopes the explorer without re-toggling it.
   useEffect(() => {
-    if (!sidebarOpen || !activePaneId) return;
-    resolveCwd(activePaneId).then((cwd) => {
-      setProjectRootMap((prev) => ({ ...prev, [activeTabId]: cwd }));
-    });
-  }, [activePaneId, sidebarOpen, activeTabId]);
+    if (!(sidebarOpen || sidebarPeek) || !activePaneId) return;
+    let cancelled = false;
+    const sync = () =>
+      resolveCwd(activePaneId).then((cwd) => {
+        if (cancelled) return;
+        setProjectRootMap((prev) =>
+          prev[activeTabId] === cwd ? prev : { ...prev, [activeTabId]: cwd }
+        );
+      });
+    sync();
+    const id = setInterval(sync, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [activePaneId, sidebarOpen, sidebarPeek, activeTabId]);
 
   // Keep the map tidy — remove entries for closed tabs.
   useEffect(() => {
@@ -477,6 +506,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       searchNonce,
       toggleSidebar: () => setSidebarOpen((v) => !v),
       setSidebarOpen,
+      sidebarPeek,
+      setSidebarPeek,
+      sidebarWidth,
+      setSidebarWidth: (w) => {
+        const clamped = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, Math.round(w)));
+        setSidebarWidthState(clamped);
+        try {
+          localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped));
+        } catch {
+          /* storage unavailable — width just won't persist across restarts */
+        }
+      },
       setProjectRoot: (root) => {
         setProjectRootMap((prev) => ({ ...prev, [activeTabId]: root }));
       },
@@ -703,6 +744,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activeTabId,
       activePaneId,
       sidebarOpen,
+      sidebarPeek,
+      sidebarWidth,
       projectRoot,
       projectRootMap,
       sidebarView,

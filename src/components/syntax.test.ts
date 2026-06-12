@@ -36,4 +36,13 @@ describe("highlightToHtml", () => {
     const html = highlightToHtml("a < b & c", "plain");
     expect(html).toBe("a &lt; b &amp; c\n");
   });
+
+  it("colors bare http(s) URLs as links in code and plain text", () => {
+    expect(highlightToHtml("x = https://example.com/x", "cstyle")).toContain(
+      '<span class="tok-link">https://example.com/x</span>'
+    );
+    expect(highlightToHtml("visit http://a.b/c here", "plain")).toContain(
+      '<span class="tok-link">http://a.b/c</span>'
+    );
+  });
 });

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useStore } from "../state/store";
 import { basename, dirname, resolveCwd } from "../workspace";
 import { ArrowUpIcon, CheckIcon, DiscardIcon, MinusIcon, PlusIcon, SyncIcon } from "./icons";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface GitFile {
   path: string;
@@ -69,18 +70,16 @@ function FileRow({
         <span className="git-row-name">{basename(file.path)}</span>
         <span className="git-row-dir">{dirname(file.path)}</span>
       </button>
-      {!staged && (
-        <button
-          className="git-row-action git-row-discard"
-          title="Discard changes"
-          aria-label={`Discard changes in ${file.path}`}
-          disabled={busy}
-          onPointerDown={preserveFocus}
-          onClick={() => onDiscard(file.path)}
-        >
-          <DiscardIcon />
-        </button>
-      )}
+      <button
+        className="git-row-action git-row-discard"
+        title="Discard changes"
+        aria-label={`Discard changes in ${file.path}`}
+        disabled={busy}
+        onPointerDown={preserveFocus}
+        onClick={() => onDiscard(file.path)}
+      >
+        <DiscardIcon />
+      </button>
       <button
         className="git-row-action"
         title={staged ? "Unstage" : "Stage"}
@@ -107,6 +106,8 @@ export function GitPanel() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  // Pending rollback awaiting the user's confirmation.
+  const [confirm, setConfirm] = useState<{ title: string; message: string; run: () => void } | null>(null);
   const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -150,18 +151,20 @@ export function GitPanel() {
   const root = status?.is_repo ? status.root : dir ?? "";
   const stage = (file: string) => run(() => invoke("git_stage", { path: root, file }));
   const unstage = (file: string) => run(() => invoke("git_unstage", { path: root, file }));
-  const discard = (file: string) => {
-    if (window.confirm(`Discard changes in "${file}"?`)) {
-      run(() => invoke("git_discard", { path: root, file }));
-    }
-  };
+  const discard = (file: string) =>
+    setConfirm({
+      title: "Discard changes",
+      message: `Are you sure you want to discard changes in "${basename(file)}"? This is irreversible.`,
+      run: () => run(() => invoke("git_discard", { path: root, file })),
+    });
   const stageAll = () => run(() => invoke("git_stage_all", { path: root }));
   const unstageAll = () => run(() => invoke("git_unstage_all", { path: root }));
-  const discardAll = () => {
-    if (window.confirm(`Discard ALL ${changes.length} change(s)? This cannot be undone.`)) {
-      run(() => invoke("git_discard_all", { path: root }));
-    }
-  };
+  const discardAll = () =>
+    setConfirm({
+      title: "Discard all changes",
+      message: `Are you sure you want to discard ALL ${changes.length} change(s)? This is irreversible.`,
+      run: () => run(() => invoke("git_discard_all", { path: root })),
+    });
   const push = () => run(() => invoke("git_push", { path: root }));
   const init = () => run(() => invoke("git_init", { path: dir }));
   const commit = () =>
@@ -322,7 +325,7 @@ export function GitPanel() {
                   <span className="git-section-count">{staged.length}</span>
                 </div>
                 {staged.map((f) => (
-                  <FileRow key={`s:${f.path}`} file={f} code={f.x} staged busy={busy} onOpen={openDiff} onAction={unstage} onDiscard={() => {}} />
+                  <FileRow key={`s:${f.path}`} file={f} code={f.x} staged busy={busy} onOpen={openDiff} onAction={unstage} onDiscard={discard} />
                 ))}
               </div>
             )}
@@ -378,6 +381,20 @@ export function GitPanel() {
           <div className="git-error">⚠ {error}</div>
         ) : null}
       </div>
+
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel="Discard"
+          danger
+          onConfirm={() => {
+            confirm.run();
+            setConfirm(null);
+          }}
+          onCancel={() => setConfirm(null)}
+        />
+      )}
     </div>
   );
 }

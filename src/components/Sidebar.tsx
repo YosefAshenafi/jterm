@@ -9,9 +9,14 @@ import { GitPanel } from "./GitPanel";
 /** Left region: a fixed activity rail (Explorer / Search / Source Control) plus
  * the resizable panel for whichever view is active. */
 export function Sidebar() {
-  const { sidebarView } = useStore();
-  const [width, setWidth] = useState(272);
+  const { sidebarView, sidebarOpen, sidebarPeek, setSidebarPeek, sidebarWidth, setSidebarWidth } =
+    useStore();
+  // Local state for a smooth live drag; seeded from (and saved back to) the
+  // remembered width so toggling the sidebar restores its last size.
+  const [width, setWidth] = useState(sidebarWidth);
   const cleanupRef = useRef<(() => void) | null>(null);
+  // Overlay (floating) mode when revealed by hover rather than pinned open.
+  const overlay = !sidebarOpen && sidebarPeek;
 
   // Tear down a live resize drag if the sidebar unmounts mid-drag so its
   // window listeners don't leak.
@@ -21,17 +26,25 @@ export function Sidebar() {
     e.preventDefault();
     const startX = e.clientX;
     const startW = width;
+    let last = width;
     cleanupRef.current = trackPointerDrag(
       e,
-      (ev) => setWidth(Math.min(560, Math.max(180, startW + ev.clientX - startX))),
+      (ev) => {
+        last = Math.min(560, Math.max(180, startW + ev.clientX - startX));
+        setWidth(last);
+      },
       () => {
         cleanupRef.current = null;
+        setSidebarWidth(last); // remember the final size
       }
     );
   };
 
   return (
-    <div className="sidebar">
+    <div
+      className={`sidebar${overlay ? " sidebar-overlay" : ""}`}
+      onMouseLeave={overlay ? () => setSidebarPeek(false) : undefined}
+    >
       <ActivityBar />
       <div className="side-panel" style={{ width }}>
         {sidebarView === "explorer" && <ExplorerPanel />}
