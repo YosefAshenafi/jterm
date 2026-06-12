@@ -269,13 +269,45 @@ struct FileEntry {
 
 const LIST_MAX_FILES: usize = 20000;
 
+/// The project root for `path`, so file/text search covers the whole project
+/// regardless of which subdirectory the terminal is in. Prefers the git
+/// top-level; otherwise walks up to the nearest ancestor holding a common
+/// project marker; otherwise returns `path` itself.
+fn resolve_project_root(path: &str) -> String {
+    if let Ok(out) = run_git(path, &["rev-parse", "--show-toplevel"]) {
+        let top = out.trim();
+        if !top.is_empty() {
+            return top.to_string();
+        }
+    }
+    const MARKERS: &[&str] = &[
+        ".git", "package.json", "Cargo.toml", "go.mod", "pyproject.toml",
+        "pom.xml", "build.gradle", "composer.json", ".hg", ".svn", "Makefile",
+    ];
+    let home = std::env::var("HOME").ok();
+    let mut dir = std::path::Path::new(path);
+    loop {
+        if MARKERS.iter().any(|m| dir.join(m).exists()) {
+            return dir.to_string_lossy().into_owned();
+        }
+        if home.as_deref() == dir.to_str() {
+            break; // don't escape past the home directory
+        }
+        match dir.parent() {
+            Some(parent) if parent != dir => dir = parent,
+            _ => break,
+        }
+    }
+    path.to_string()
+}
+
 /// Every file under `root`, skipping hidden and heavy build/vendor directories
 /// (the same set the workspace search ignores). Sorted by relative path. Used by
 /// the quick-open picker; capped so a giant tree can't stall the UI.
 #[tauri::command]
 async fn list_files(root: String) -> Result<Vec<FileEntry>, String> {
     blocking(move || {
-        let root = std::path::PathBuf::from(&root);
+        let root = std::path::PathBuf::from(resolve_project_root(&root));
         let mut out: Vec<FileEntry> = Vec::new();
         let mut stack = vec![root.clone()];
         'walk: while let Some(dir) = stack.pop() {
@@ -291,7 +323,7 @@ async fn list_files(root: String) -> Result<Vec<FileEntry>, String> {
                     Err(_) => continue,
                 };
                 if file_type.is_dir() {
-                    if !name.starts_with('.') && !SKIP_DIRS.contains(&name.as_ref()) {
+                    if !SKIP_DIRS.contains(&name.as_ref()) {
                         stack.push(entry.path());
                     }
                 } else if file_type.is_file() {
@@ -319,20 +351,29 @@ async fn list_files(root: String) -> Result<Vec<FileEntry>, String> {
 
 // ---- Full-text search -------------------------------------------------------
 
-/// Non-hidden directories never descended into during a workspace search.
-/// (Hidden dirs — names starting with `.` — are skipped separately.)
+/// Directories never descended into when listing/searching the project. Only
+/// dependency and cache/build-cache dirs are skipped — NOT `dist`/`build` output
+/// or hidden config dirs (`.github`, `.claude`, …), so a project's own files
+/// (even gitignored ones) still show up, like a file finder should.
 const SKIP_DIRS: &[&str] = &[
     "node_modules",
+    ".git",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".turbo",
+    ".cache",
+    ".parcel-cache",
     "target",
-    "dist",
-    "build",
     "vendor",
     "venv",
+    ".venv",
     "__pycache__",
-    "coverage",
-    "out",
-    "bin",
-    "obj",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".gradle",
+    ".terraform",
+    "Pods",
 ];
 const SEARCH_MAX_FILE_BYTES: u64 = 2 * 1024 * 1024;
 const SEARCH_MAX_RESULTS: usize = 1000;
@@ -444,7 +485,8 @@ fn search_blocking(path: &str, needle: &str, generation: &AtomicU64, my_gen: u64
         truncated: false,
     };
     let superseded = || generation.load(Ordering::Relaxed) != my_gen;
-    let root = std::path::PathBuf::from(path);
+    // Search the whole repo, not just the terminal's current subdirectory.
+    let root = std::path::PathBuf::from(resolve_project_root(path));
 
     // 1) Enumerate candidate files. Directory walking is cheap; the costly part
     //    (reading + scanning contents) is parallelized below.
@@ -471,7 +513,7 @@ fn search_blocking(path: &str, needle: &str, generation: &AtomicU64, my_gen: u64
                 Err(_) => continue,
             };
             if file_type.is_dir() {
-                if !name.starts_with('.') && !SKIP_DIRS.contains(&name.as_ref()) {
+                if !SKIP_DIRS.contains(&name.as_ref()) {
                     stack.push(entry.path());
                 }
             } else if file_type.is_file() {
