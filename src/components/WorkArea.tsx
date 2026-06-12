@@ -58,6 +58,11 @@ export function WorkArea() {
     );
   };
 
+  // Editor zoom: font size (from settings, ⌘+/⌘-/⌘scroll) and a matching line
+  // height that the gutter and scroll math both use.
+  const editorFont = store.settings.editorFontSize;
+  const editorLine = Math.round(editorFont * 1.45);
+
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
   const hasFiles = editor.files.length > 0;
   const showTerminal = editor.activePath === null;
@@ -113,7 +118,7 @@ export function WorkArea() {
     const end = start + lines[line - 1].length;
     ta.focus();
     ta.setSelectionRange(start, end);
-    const lh = 18; // matches .editor-input line-height
+    const lh = editorLine; // matches the editor's line height
     ta.scrollTop = Math.max(0, (line - 1) * lh - ta.clientHeight / 2 + lh);
     syncScroll();
     store.clearReveal();
@@ -378,10 +383,17 @@ export function WorkArea() {
             ) : (
               <>
                 {active.error ? <div className="editor-banner">⚠ {active.error}</div> : null}
-                <div className="editor-code">
+                <div
+                  className="editor-code"
+                  style={{ fontSize: editorFont, lineHeight: `${editorLine}px` }}
+                >
                   <div className="editor-gutter" ref={gutterRef} aria-hidden="true">
                     {lineNumbers.map((n) => (
-                      <div key={n} className="editor-lineno">
+                      <div
+                        key={n}
+                        className="editor-lineno"
+                        style={{ height: editorLine, lineHeight: `${editorLine}px` }}
+                      >
                         {n}
                       </div>
                     ))}
@@ -416,7 +428,7 @@ export function WorkArea() {
                   if (!ta) return;
                   ta.setSelectionRange(s, e);
                   const line = active.draft.slice(0, s).split("\n").length;
-                  ta.scrollTop = Math.max(0, (line - 1) * 18 - ta.clientHeight / 2 + 18);
+                  ta.scrollTop = Math.max(0, (line - 1) * editorLine - ta.clientHeight / 2 + editorLine);
                   syncScroll();
                 }}
                 onClose={() => {

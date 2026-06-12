@@ -725,6 +725,11 @@ body {
   background: #2a3340;
   color: var(--text);
 }
+/* Discard-all is destructive — tint it on hover like the per-file discard. */
+.git-section-discard:hover {
+  background: rgba(224, 108, 117, 0.2);
+  color: #e06c75;
+}
 .git-row {
   display: flex;
   align-items: center;

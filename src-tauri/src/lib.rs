@@ -736,6 +736,22 @@ async fn git_unstage(path: String, file: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn git_unstage_all(path: String) -> Result<(), String> {
+    blocking(move || run_git(&path, &["reset", "-q", "HEAD"]).map(|_| ())).await
+}
+
+#[tauri::command]
+async fn git_discard_all(path: String) -> Result<(), String> {
+    blocking(move || {
+        // Revert tracked changes in the working tree, then remove untracked
+        // files/dirs (respecting .gitignore) — VS Code's "Discard All Changes".
+        let _ = run_git(&path, &["checkout", "--", "."]);
+        run_git(&path, &["clean", "-fd"]).map(|_| ())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn git_commit(path: String, message: String) -> Result<String, String> {
     if message.trim().is_empty() {
         return Err("Commit message is empty".into());
@@ -864,7 +880,9 @@ pub fn run() {
             git_stage,
             git_stage_all,
             git_unstage,
+            git_unstage_all,
             git_discard,
+            git_discard_all,
             git_diff,
             git_commit,
             git_push,

@@ -13,6 +13,8 @@ export interface Settings {
   /** Monospace font stack used by every terminal. */
   fontFamily: string;
   fontSize: number;
+  /** Font size (px) of the file editor — zoomed independently of terminals. */
+  editorFontSize: number;
   /** Multiplier applied to the line box height (1 = tight). */
   lineHeight: number;
   cursorStyle: CursorStyle;
@@ -25,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   accent: "#5ac8fa",
   fontFamily: FONT_FAMILY,
   fontSize: FONT_SIZE,
+  editorFontSize: 13,
   lineHeight: 1.0,
   cursorStyle: "block",
   cursorBlink: true,
