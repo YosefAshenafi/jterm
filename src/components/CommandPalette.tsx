@@ -73,7 +73,10 @@ function FilePalette() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const root = store.projectRoot ?? (await resolveCwd(store.activePaneId));
+      // Use the terminal's *current* directory (not the possibly-stale stored
+      // project root); list_files resolves it to the git/project root so the
+      // whole project is searched.
+      const root = (await resolveCwd(store.activePaneId)) || store.projectRoot;
       if (!root) {
         if (alive) setFiles([]);
         return;
