@@ -15,6 +15,7 @@ import {
 import { invoke } from "@tauri-apps/api/core";
 import { terminals } from "../terminal/manager";
 import {
+  DEFAULT_SETTINGS,
   hexToRgba,
   loadSettings,
   saveSettings,
@@ -347,6 +348,8 @@ interface StoreApi {
   // User settings (appearance, terminal prefs).
   settings: Settings;
   updateSettings(patch: Partial<Settings>): void;
+  /** Zoom a surface's font: delta +1/-1 steps, 0 resets to default. */
+  zoom(surface: "editor" | "terminal", delta: number): void;
   // Editor (file viewer/editor beside the folder tree).
   editor: EditorState;
   focusRegion: FocusRegion;
@@ -590,6 +593,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       settings,
       updateSettings: (patch) => setSettings((s) => ({ ...s, ...patch })),
+      zoom: (surface, delta) => {
+        const key = surface === "editor" ? "editorFontSize" : "fontSize";
+        setSettings((s) => {
+          const base = delta === 0 ? DEFAULT_SETTINGS[key] : s[key] + delta;
+          return { ...s, [key]: Math.min(40, Math.max(8, base)) };
+        });
+      },
 
       editor,
       focusRegion,

@@ -156,6 +156,12 @@ export function GitPanel() {
     }
   };
   const stageAll = () => run(() => invoke("git_stage_all", { path: root }));
+  const unstageAll = () => run(() => invoke("git_unstage_all", { path: root }));
+  const discardAll = () => {
+    if (window.confirm(`Discard ALL ${changes.length} change(s)? This cannot be undone.`)) {
+      run(() => invoke("git_discard_all", { path: root }));
+    }
+  };
   const push = () => run(() => invoke("git_push", { path: root }));
   const init = () => run(() => invoke("git_init", { path: dir }));
   const commit = () =>
@@ -303,6 +309,16 @@ export function GitPanel() {
               <div className="git-section">
                 <div className="git-section-head">
                   <span>Staged Changes</span>
+                  <button
+                    className="git-section-action"
+                    title="Unstage all changes"
+                    aria-label="Unstage all changes"
+                    disabled={busy}
+                    onPointerDown={preserveFocus}
+                    onClick={unstageAll}
+                  >
+                    <MinusIcon />
+                  </button>
                   <span className="git-section-count">{staged.length}</span>
                 </div>
                 {staged.map((f) => (
@@ -315,16 +331,28 @@ export function GitPanel() {
               <div className="git-section-head">
                 <span>Changes</span>
                 {changes.length > 0 && (
-                  <button
-                    className="git-section-action"
-                    title="Stage all changes"
-                    aria-label="Stage all changes"
-                    disabled={busy}
-                    onPointerDown={preserveFocus}
-                    onClick={stageAll}
-                  >
-                    <PlusIcon />
-                  </button>
+                  <>
+                    <button
+                      className="git-section-action git-section-discard"
+                      title="Discard all changes"
+                      aria-label="Discard all changes"
+                      disabled={busy}
+                      onPointerDown={preserveFocus}
+                      onClick={discardAll}
+                    >
+                      <DiscardIcon />
+                    </button>
+                    <button
+                      className="git-section-action"
+                      title="Stage all changes"
+                      aria-label="Stage all changes"
+                      disabled={busy}
+                      onPointerDown={preserveFocus}
+                      onClick={stageAll}
+                    >
+                      <PlusIcon />
+                    </button>
+                  </>
                 )}
                 <span className="git-section-count">{changes.length}</span>
               </div>

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore } from "./state/store";
 import { collectLeaves } from "./state/tree";
@@ -71,6 +71,29 @@ export default function App() {
     terminals.reconcile(live);
   }, [state, store.panelTerminals]);
 
+  // ⌘/Ctrl + scroll zooms the surface under the cursor (terminal or editor),
+  // like iTerm. Deltas are accumulated so a step is one notch / a bit of trackpad.
+  const storeRef = useRef(store);
+  storeRef.current = store;
+  useEffect(() => {
+    let acc = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      const el = e.target as HTMLElement | null;
+      const onEditor = !!el?.closest(".editor-body");
+      const onTerminal = !!el?.closest(".terminal-host");
+      if (!onEditor && !onTerminal) return;
+      e.preventDefault(); // stop the webview's own page zoom / scroll
+      acc += e.deltaY;
+      if (Math.abs(acc) < 40) return;
+      const delta = acc < 0 ? 1 : -1; // scroll up = zoom in
+      acc = 0;
+      storeRef.current.zoom(onEditor ? "editor" : "terminal", delta);
+    };
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel);
+  }, []);
+
   // Keyboard shortcuts (Cmd on macOS, Ctrl+Shift elsewhere to avoid clobbering
   // terminal control characters like ^C/^D/^W).
   useEffect(() => {
@@ -103,6 +126,15 @@ export default function App() {
       if (k === "p" && !e.shiftKey) return run(() => store.openQuickFiles());
       if (k === "g" && !e.shiftKey) return run(() => store.openGoToLine());
       if (k === "f" && !e.shiftKey) return run(() => store.openFind());
+      // iTerm-style zoom: ⌘=/⌘+ in, ⌘- out, ⌘0 reset — on the focused surface.
+      if (k === "=" || k === "+" || k === "-" || k === "_" || k === "0") {
+        const t = e.target as HTMLElement | null;
+        const onEditor =
+          !!t?.closest(".editor-body") ||
+          (store.focusRegion === "editor" && !!store.editor.activePath);
+        const delta = k === "0" ? 0 : k === "-" || k === "_" ? -1 : 1;
+        return run(() => store.zoom(onEditor ? "editor" : "terminal", delta));
+      }
 
       // xterm types into a hidden helper <textarea>, so anything inside a
       // terminal host is the terminal, not a text field.
