@@ -34,7 +34,13 @@ import {
   splitPane,
 } from "./tree";
 import { DropTarget, DropZone } from "./paneDnd";
-import { EditorState, editorReducer, emptyEditor, isDirty } from "./editor";
+import {
+  EditorAction,
+  editorMapReducer,
+  EditorState,
+  emptyEditor,
+  isDirty,
+} from "./editor";
 import { basename, resolveCwd } from "../workspace";
 import { homeDir } from "@tauri-apps/api/path";
 
@@ -418,7 +424,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
   const [searchNonce, setSearchNonce] = useState(0);
   const [reveal, setReveal] = useState<RevealTarget | null>(null);
-  const [editor, editorDispatch] = useReducer(editorReducer, emptyEditor);
+  const [editorMap, editorMapDispatch] = useReducer(editorMapReducer, {});
   const [focusRegion, setFocusRegion] = useState<FocusRegion>("terminal");
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [gitChangesCount, setGitChangesCount] = useState(0);
@@ -459,6 +465,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     state.tabs.find((t) => t.id === activeTabId)?.activePaneId ?? null;
   const projectRoot = projectRootMap[activeTabId] ?? null;
 
+  // The editor (open files) is per-tab; the active tab's buffers are what the
+  // workspace renders, and `editorDispatch` always targets the active tab.
+  const editor = editorMap[activeTabId] ?? emptyEditor;
+  const editorDispatch = (action: EditorAction) =>
+    editorMapDispatch({ ...action, tabId: activeTabId });
+
   // Per-tab project root: track the active pane's CWD while the sidebar is open
   // so the file tree (and search/git) scope to the current folder. Polled so a
   // `cd` in the terminal re-scopes the explorer without re-toggling it.
@@ -480,7 +492,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [activePaneId, sidebarOpen, sidebarPeek, activeTabId]);
 
-  // Keep the map tidy — remove entries for closed tabs.
+  // Keep the maps tidy — remove entries for closed tabs.
   useEffect(() => {
     const ids = new Set(state.tabs.map((t) => t.id));
     setProjectRootMap((prev) => {
@@ -488,6 +500,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       for (const k of Object.keys(next)) if (!ids.has(k)) delete next[k];
       return next;
     });
+    editorMapDispatch({ type: "prune", ids });
   }, [state.tabs]);
 
   // Persist tab titles across restarts.
@@ -544,17 +557,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setProjectRootMap((prev) => ({ ...prev, [tabId]: h }));
       },
       closeTab: (tabId) => dispatch({ type: "close-tab", tabId }),
-      // Switching terminal workspaces also brings the Terminal tab forward, so a
-      // top-tab click always lands you on terminals (not whatever file you last
-      // viewed). Same for the index shortcut.
+      // Each tab keeps its own open files, so switching restores whatever that
+      // tab was last showing — the file it was viewing, or the terminal grid.
       selectTab: (tabId) => {
-        editorDispatch({ type: "show-terminal" });
-        setFocusRegion("terminal");
+        const target = editorMap[tabId] ?? emptyEditor;
+        setFocusRegion(target.activePath ? "editor" : "terminal");
         dispatch({ type: "select-tab", tabId });
       },
       selectTabIndex: (index) => {
-        editorDispatch({ type: "show-terminal" });
-        setFocusRegion("terminal");
+        const tab = state.tabs[index];
+        const target = (tab && editorMap[tab.id]) || emptyEditor;
+        setFocusRegion(target.activePath ? "editor" : "terminal");
         dispatch({ type: "select-tab-index", index });
       },
       split: (direction) => {
@@ -752,6 +765,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       searchNonce,
       reveal,
       editor,
+      editorMap,
       focusRegion,
       settings,
       gitChangesCount,

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { EditorState, editorReducer, emptyEditor, isDirty } from "./editor";
+import {
+  EditorMap,
+  editorMapReducer,
+  EditorState,
+  editorReducer,
+  emptyEditor,
+  isDirty,
+} from "./editor";
 
 const open = (s: EditorState, path: string) =>
   editorReducer(s, { type: "open", path, name: path.split("/").pop()! });
@@ -74,5 +81,52 @@ describe("select / close", () => {
     let s = open(open(emptyEditor, "/a.ts"), "/b.ts");
     s = editorReducer(s, { type: "close", path: "/a.ts" });
     expect(s.activePath).toBe("/b.ts");
+  });
+});
+
+describe("per-tab editor map", () => {
+  const openIn = (m: EditorMap, tabId: string, path: string) =>
+    editorMapReducer(m, { type: "open", tabId, path, name: path.split("/").pop()! });
+
+  it("opening a file in one tab does not affect another tab", () => {
+    let m: EditorMap = {};
+    m = openIn(m, "tab1", "/a.ts");
+    expect(m.tab1.files.map((f) => f.path)).toEqual(["/a.ts"]);
+    // The other tab has never been touched — it stays empty.
+    expect(m.tab2).toBeUndefined();
+  });
+
+  it("a freshly created tab starts with no open files", () => {
+    let m: EditorMap = {};
+    m = openIn(m, "tab1", "/a.ts");
+    m = openIn(m, "tab1", "/b.ts");
+    // tab2 is brand new: reading it falls back to the empty editor.
+    const tab2 = m.tab2 ?? emptyEditor;
+    expect(tab2.files).toHaveLength(0);
+    expect(tab2.activePath).toBeNull();
+  });
+
+  it("each tab keeps its own active file independently", () => {
+    let m: EditorMap = {};
+    m = openIn(m, "tab1", "/a.ts");
+    m = openIn(m, "tab2", "/b.ts");
+    expect(m.tab1.activePath).toBe("/a.ts");
+    expect(m.tab2.activePath).toBe("/b.ts");
+  });
+
+  it("prune drops entries for closed tabs and keeps the rest", () => {
+    let m: EditorMap = {};
+    m = openIn(m, "tab1", "/a.ts");
+    m = openIn(m, "tab2", "/b.ts");
+    m = editorMapReducer(m, { type: "prune", ids: new Set(["tab2"]) });
+    expect(m.tab1).toBeUndefined();
+    expect(m.tab2.files.map((f) => f.path)).toEqual(["/b.ts"]);
+  });
+
+  it("prune returns the same reference when nothing changes", () => {
+    let m: EditorMap = {};
+    m = openIn(m, "tab1", "/a.ts");
+    const same = editorMapReducer(m, { type: "prune", ids: new Set(["tab1"]) });
+    expect(same).toBe(m);
   });
 });
