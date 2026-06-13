@@ -141,3 +141,27 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return state;
   }
 }
+
+// Open files are per-tab: each tab id maps to its own EditorState, so a newly
+// created tab starts empty instead of inheriting another tab's open files.
+export type EditorMap = Record<string, EditorState>;
+
+export type EditorMapAction =
+  | (EditorAction & { tabId: string })
+  | { type: "prune"; ids: Set<string> };
+
+export function editorMapReducer(state: EditorMap, action: EditorMapAction): EditorMap {
+  // Drop entries for tabs that no longer exist.
+  if (action.type === "prune") {
+    let changed = false;
+    const next: EditorMap = {};
+    for (const id of Object.keys(state)) {
+      if (action.ids.has(id)) next[id] = state[id];
+      else changed = true;
+    }
+    return changed ? next : state;
+  }
+  const current = state[action.tabId] ?? emptyEditor;
+  const updated = editorReducer(current, action);
+  return updated === current ? state : { ...state, [action.tabId]: updated };
+}
