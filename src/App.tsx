@@ -1,5 +1,9 @@
 import { useEffect, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  readText as clipboardReadText,
+  writeText as clipboardWriteText,
+} from "@tauri-apps/plugin-clipboard-manager";
 import { useStore } from "./state/store";
 import { collectLeaves } from "./state/tree";
 import { terminals } from "./terminal/manager";
@@ -11,6 +15,53 @@ import { CommandPalette } from "./components/CommandPalette";
 
 const isMac =
   /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
+
+type TextField = HTMLInputElement | HTMLTextAreaElement;
+
+// These inputs are React-controlled, so assigning `.value` directly is ignored.
+// Go through the prototype's native value setter and dispatch an `input` event —
+// the change React's onChange actually listens for.
+function setFieldValue(el: TextField, value: string) {
+  const proto =
+    el instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, value);
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+// Replace the current selection (or insert at the caret), leaving the caret
+// after the inserted text.
+function replaceFieldSelection(el: TextField, text: string) {
+  const start = el.selectionStart ?? el.value.length;
+  const end = el.selectionEnd ?? el.value.length;
+  setFieldValue(el, el.value.slice(0, start) + text + el.value.slice(end));
+  const caret = start + text.length;
+  el.setSelectionRange(caret, caret);
+}
+
+// macOS strips the native Edit menu (see src-tauri/src/lib.rs) so the webview
+// never wires Cmd+C/V/X/A in plain text fields like the ⌘P palette. Service them
+// via the clipboard plugin, mirroring how the terminal and editor already do.
+function fieldClipboard(el: TextField, k: string) {
+  const selected = () => el.value.slice(el.selectionStart ?? 0, el.selectionEnd ?? 0);
+  if (k === "a") {
+    el.select();
+  } else if (k === "c") {
+    const sel = selected();
+    if (sel) void clipboardWriteText(sel);
+  } else if (k === "x") {
+    const sel = selected();
+    if (sel) {
+      void clipboardWriteText(sel);
+      replaceFieldSelection(el, "");
+    }
+  } else if (k === "v") {
+    void clipboardReadText()
+      .then((text) => text != null && replaceFieldSelection(el, text))
+      .catch(() => {});
+  }
+}
 
 export default function App() {
   const store = useStore();
@@ -154,6 +205,12 @@ export default function App() {
       if (inField || editorFocused) {
         if (editorFocused && k === "w") return run(() => store.closeActiveFile());
         if (editorFocused && k === "s") return run(() => store.saveActiveFile());
+        // Cmd+C/V/X/A in a plain text field (e.g. the ⌘P search box). On macOS
+        // the native Edit menu is gone, so service these ourselves; elsewhere
+        // the webview handles them natively, so leave them alone.
+        if (isMac && inField && (k === "c" || k === "v" || k === "x" || k === "a")) {
+          return run(() => fieldClipboard(el as TextField, k));
+        }
         return;
       }
 

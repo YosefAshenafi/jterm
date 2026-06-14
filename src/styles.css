@@ -2318,6 +2318,57 @@ body.pane-dragging * {
   border-top: none;
 }
 
+/* ---- Publish to GitHub dialog ---- */
+.modal-publish {
+  width: min(440px, 92vw);
+}
+.publish-body {
+  padding: 18px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.publish-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.publish-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.publish-input {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.publish-input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.publish-hint {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+.publish-error {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(192, 69, 75, 0.14);
+  color: #f0a3a7;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* ---- Command palette (⌘P quick-open / ⌘G go-to-line) ---- */
 .palette-overlay {
   position: fixed;

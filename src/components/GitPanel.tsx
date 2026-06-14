@@ -108,6 +108,8 @@ export function GitPanel() {
   const [busy, setBusy] = useState(false);
   // Pending rollback awaiting the user's confirmation.
   const [confirm, setConfirm] = useState<{ title: string; message: string; run: () => void } | null>(null);
+  // Showing the "Publish to GitHub" chooser (repo has no remote yet).
+  const [publishing, setPublishing] = useState(false);
   const seqRef = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -166,6 +168,9 @@ export function GitPanel() {
       run: () => run(() => invoke("git_discard_all", { path: root })),
     });
   const push = () => run(() => invoke("git_push", { path: root }));
+  // Publish: with no remote yet, open the public/private chooser (VS Code-style);
+  // once a remote exists, the same button just pushes.
+  const onPublish = () => (status?.upstream ? push() : setPublishing(true));
   const init = () => run(() => invoke("git_init", { path: dir }));
   const commit = () =>
     run(async () => {
@@ -246,10 +251,10 @@ export function GitPanel() {
                       ? `Push to ${status.upstream}`
                       : "Publish the current branch"
                 }
-                aria-label="Push"
+                aria-label={status.upstream ? "Push" : "Publish"}
                 disabled={busy || synced}
                 onPointerDown={preserveFocus}
-                onClick={push}
+                onClick={onPublish}
               >
                 <ArrowUpIcon />
                 {status.ahead > 0 ? <span className="git-ahead">{status.ahead}</span> : null}
@@ -289,10 +294,10 @@ export function GitPanel() {
                   }
                   disabled={busy}
                   onPointerDown={preserveFocus}
-                  onClick={push}
+                  onClick={onPublish}
                 >
                   <ArrowUpIcon />{" "}
-                  {status.upstream ? `Push (${status.ahead})` : "Publish Branch"}
+                  {status.upstream ? `Push (${status.ahead})` : "Publish to GitHub"}
                 </button>
               ) : (
                 <button
@@ -395,6 +400,18 @@ export function GitPanel() {
           onCancel={() => setConfirm(null)}
         />
       )}
+
+      {publishing && (
+        <PublishDialog
+          root={root}
+          defaultName={basename(root)}
+          onPublished={() => {
+            setPublishing(false);
+            refresh();
+          }}
+          onCancel={() => setPublishing(false)}
+        />
+      )}
     </div>
   );
 }
@@ -404,5 +421,154 @@ function GitBranchLabel({ branch }: { branch: string }) {
     <span className="git-branch-name" title={branch}>
       {branch || "(no branch)"}
     </span>
+  );
+}
+
+// ── Publish to GitHub ───────────────────────────────────────
+
+/** Chooser shown when publishing a repo that has no remote yet: pick a name and
+ * public/private, then create the GitHub repo and push (via the GitHub CLI). */
+function PublishDialog({
+  root,
+  defaultName,
+  onPublished,
+  onCancel,
+}: {
+  root: string;
+  defaultName: string;
+  onPublished: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(defaultName);
+  const [isPrivate, setIsPrivate] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  // Esc cancels (but not mid-publish, so we don't abandon an in-flight create).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) {
+        e.stopPropagation();
+        onCancel();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onCancel, busy]);
+
+  const submit = async () => {
+    const repo = name.trim();
+    if (!repo || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await invoke("git_publish", { path: root, name: repo, private: isPrivate });
+      onPublished();
+    } catch (e) {
+      setError(String(e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onPointerDown={() => !busy && onCancel()}>
+      <div
+        className="modal modal-publish"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Publish to GitHub"
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <div className="modal-heading">
+            <span className="modal-eyebrow">Source Control</span>
+            <span className="modal-title">Publish to GitHub</span>
+          </div>
+          <button
+            className="modal-close"
+            aria-label="Cancel"
+            disabled={busy}
+            onPointerDown={preserveFocus}
+            onClick={onCancel}
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="publish-body">
+          <label className="publish-field">
+            <span className="publish-label">Repository name</span>
+            <input
+              ref={inputRef}
+              className="publish-input"
+              value={name}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              disabled={busy}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+                e.stopPropagation();
+              }}
+            />
+          </label>
+
+          <div className="publish-field">
+            <span className="publish-label">Visibility</span>
+            <div className="segmented" role="group" aria-label="Repository visibility">
+              <button
+                type="button"
+                className={`segmented-btn${isPrivate ? " active" : ""}`}
+                disabled={busy}
+                onPointerDown={preserveFocus}
+                onClick={() => setIsPrivate(true)}
+              >
+                Private
+              </button>
+              <button
+                type="button"
+                className={`segmented-btn${!isPrivate ? " active" : ""}`}
+                disabled={busy}
+                onPointerDown={preserveFocus}
+                onClick={() => setIsPrivate(false)}
+              >
+                Public
+              </button>
+            </div>
+            <span className="publish-hint">
+              {isPrivate
+                ? "Only you can see this repository."
+                : "Anyone on the internet can see this repository."}
+            </span>
+          </div>
+
+          {error ? <div className="publish-error">⚠ {error}</div> : null}
+        </div>
+
+        <footer className="modal-footer">
+          <span className="modal-hint">Requires the GitHub CLI (gh), signed in.</span>
+          <div className="modal-footer-actions">
+            <button className="btn btn-ghost" disabled={busy} onPointerDown={preserveFocus} onClick={onCancel}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-primary"
+              disabled={!name.trim() || busy}
+              onPointerDown={preserveFocus}
+              onClick={submit}
+            >
+              {busy ? "Publishing…" : "Publish"}
+            </button>
+          </div>
+        </footer>
+      </div>
+    </div>
   );
 }
