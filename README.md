@@ -1,20 +1,39 @@
+<div align="center">
+
+<img src="public/jterm.png" alt="jterm logo" width="200" />
+
 # jterm
 
-A fast, native terminal for macOS and Windows with tabs, recursive split panes,
-and real mouse support, plus a VS Code-style file tree, editor, search, and Git
-panel when you need them. One codebase: a Rust backend (Tauri) and a
-React/TypeScript frontend driving [xterm.js](https://xtermjs.org/).
+**A fast, native terminal for macOS and Windows** — tabs, recursive split panes,
+and real mouse support, with a VS Code-style file tree, editor, search, and Git
+panel when you need them.
 
 [![CI](https://github.com/yosefashenafi/jterm/actions/workflows/ci.yml/badge.svg)](https://github.com/yosefashenafi/jterm/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Latest release](https://img.shields.io/github/v/release/yosefashenafi/jterm?sort=semver)](https://github.com/yosefashenafi/jterm/releases)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
 
-<!-- Add a screenshot of the app here once you have one, e.g.:
-![jterm](docs/screenshot.png)
-A good shot: two tabs, a couple of splits, the file tree open, and htop running. -->
+</div>
 
-## Why
+> One codebase: a Rust backend ([Tauri](https://tauri.app)) and a React/TypeScript
+> frontend driving [xterm.js](https://xtermjs.org/).
+
+## Contents
+
+- [Why jterm](#why-jterm)
+- [Features](#features)
+- [Install](#install)
+- [Develop](#develop)
+- [Keyboard shortcuts](#keyboard-shortcuts)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Roadmap](#roadmap)
+- [Known limitations](#known-limitations)
+- [Contributing](#contributing)
+- [Releasing](#releasing)
+- [License](#license)
+
+## Why jterm
 
 Most terminals make you choose: a fast, no-frills terminal *or* a heavy IDE
 terminal bolted onto an editor. jterm is a small, focused middle ground. It's a
@@ -42,7 +61,10 @@ yours.
 - Tabs: `+` to add, `×` to close, click to switch, double-click to rename.
 - Recursive split panes, left/right or top/bottom, nested as deep as you like.
   Drag the dividers to resize; each pane is its own live shell.
+- **Drag a pane** onto another pane's edge, onto a tab, or out into a new tab.
 - Maximize a pane to fill the workspace and back (`⌘M`).
+- **Bottom panel** (`⌘J`): a VS Code-style drawer of extra terminals with its own
+  tabs (`⌘⇧J` adds one).
 - Switching tabs or splitting **never kills a running shell**: terminals live
   outside React, keyed by pane id, so layout changes only move their DOM around.
 
@@ -54,14 +76,21 @@ yours.
   thread, across all your cores, and cancels itself when you keep typing, so the
   window never freezes. Skips `node_modules`, `.git`, `target`, binaries, etc.
 - **Source Control** (`⌘⇧G`): branch, ahead/behind, staged vs. unstaged changes,
-  stage/unstage/stage-all, a commit box (`⌘↵`), and push. Shells out to the
-  `git` on your `PATH`; non-repos offer **Initialize Repository**.
-- **Editor**: a column between the tree and the terminal. Tabbed buffers with a
-  dirty dot, a line-number gutter, save (`⌘S`), and a guard before discarding
+  stage/unstage/discard, a commit box (`⌘↵`), and push. **Publish to GitHub**
+  creates a new public or private repo and pushes in one step (via the GitHub
+  CLI). Shells out to the `git` on your `PATH`; non-repos offer **Initialize
+  Repository**.
+- **Editor**: a column between the tree and the terminal. Tabbed buffers (each
+  terminal tab keeps its own), syntax highlighting, file-type-aware auto-indent,
+  a line-number gutter, undo/redo, and save (`⌘S`) with a guard before discarding
   unsaved changes. Refuses binaries and files over 8 MB.
+- **Markdown preview**: open a `.md` file and toggle a rendered **Preview** from
+  the editor status bar.
+- **Quick Open** (`⌘P`), **Go to Line** (`⌘G`), and **Find in file** (`⌘F`).
 
 **Appearance**: a settings panel for accent color (which also tints the
-terminal cursor), font size, and cursor blink. Changes apply live and persist.
+terminal cursor), font family and size, line height, cursor style and blink, and
+scrollback. Changes apply live and persist.
 
 ## Install
 
@@ -129,32 +158,59 @@ parsing helpers.
 ## Keyboard shortcuts
 
 Everything below is also reachable with the mouse (tab-bar buttons, divider
-drag, right-click menu), so you never *need* the keyboard.
+drag, activity bar, right-click menu), so you never *need* the keyboard. macOS
+bindings are shown; on **Windows/Linux** substitute **Ctrl+Shift** for ⌘, so
+plain `^C`/`^D`/`^W` stay with the shell.
 
-| Action                              | macOS   | Windows / Linux  |
-| ----------------------------------- | ------- | ---------------- |
-| New tab                             | ⌘T      | Ctrl+Shift+T     |
-| Close focused pane / file tab       | ⌘W      | Ctrl+Shift+W     |
-| Save the active file                | ⌘S      | Ctrl+Shift+S     |
-| Search across the folder            | ⌘⇧F     | Ctrl+Shift+F     |
-| Source Control (Git)                | ⌘⇧G     | Ctrl+Shift+G     |
-| Maximize / restore the active pane  | ⌘M      | Ctrl+Shift+M     |
-| Split left/right                    | ⌘D      | Ctrl+Shift+D     |
-| Split top/bottom                    | ⌘⇧D     | Ctrl+Shift+E     |
-| Cycle pane focus                    | ⌘] / ⌘[ | Ctrl+Shift+] / [ |
-| Switch to tab N                     | ⌘1…⌘9   | (none)           |
-| Copy selection                      | ⌘C      | Ctrl+Shift+C     |
-| Paste                               | ⌘V      | Ctrl+Shift+V     |
+**Tabs & panes**
 
-On Windows/Linux the app uses **Ctrl+Shift** so plain `^C`/`^D`/`^W` stay with
-the shell.
+| Action                             | Shortcut  |
+| ---------------------------------- | --------- |
+| New tab                            | ⌘T        |
+| Switch to tab N                    | ⌘1 … ⌘9   |
+| Close focused pane / file tab      | ⌘W        |
+| Split left / right                 | ⌘D        |
+| Split top / bottom                 | ⌘⇧D       |
+| Cycle pane focus                   | ⌘] / ⌘[   |
+| Maximize / restore the active pane | ⌘M        |
+
+**Workspace & panels**
+
+| Action                            | Shortcut |
+| --------------------------------- | -------- |
+| Toggle the file explorer          | ⌘B       |
+| Search across the folder          | ⌘⇧F      |
+| Source Control (Git)              | ⌘⇧G      |
+| Toggle the bottom terminal panel  | ⌘J       |
+| New terminal in the bottom panel  | ⌘⇧J      |
+| Quick Open files                  | ⌘P       |
+
+**Editor**
+
+| Action                | Shortcut       |
+| --------------------- | -------------- |
+| Save the active file  | ⌘S             |
+| Find in file          | ⌘F             |
+| Go to line            | ⌘G             |
+| Zoom in / out / reset | ⌘+ / ⌘- / ⌘0   |
+
+**Clipboard**
+
+| Action          | Shortcut |
+| --------------- | -------- |
+| Copy selection  | ⌘C       |
+| Paste           | ⌘V       |
+
+> The single-key shortcuts (⌘B, ⌘P, ⌘G, ⌘F, ⌘J, zoom) are macOS-only for now;
+> the chorded ones work on Windows/Linux via Ctrl+Shift.
 
 ## Configuration
 
 There's no config file yet (it's [planned](#roadmap)). Today:
 
-- **Appearance**: accent color, font size, and cursor blink live in the
-  in-app **Settings** panel (the gear, top-right) and persist to `localStorage`.
+- **Appearance**: accent color, font, line height, cursor, and scrollback live
+  in the in-app **Settings** panel (the gear, top-right) and persist to
+  `localStorage`.
 - **Theme defaults**: the color scheme and font stack are in
   [`src/terminal/theme.ts`](src/terminal/theme.ts). Edit there to change the
   built-in defaults.

@@ -13,9 +13,7 @@ import { Toolbar } from "./components/Toolbar";
 import { Sidebar } from "./components/Sidebar";
 import { WorkArea } from "./components/WorkArea";
 import { CommandPalette } from "./components/CommandPalette";
-
-const isMac =
-  /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
+import { isMac } from "./platform";
 
 type TextField = HTMLInputElement | HTMLTextAreaElement;
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { findAllOccurrences } from "./textSearch";
 
 interface Props {
   /** The text being searched (the active file's buffer). */
@@ -22,18 +23,8 @@ export function FindBar({ text, onSelect, onClose }: Props) {
     inputRef.current?.select();
   }, []);
 
-  const matches = useMemo(() => {
-    if (!query) return [];
-    const out: number[] = [];
-    const hay = text.toLowerCase();
-    const needle = query.toLowerCase();
-    let i = hay.indexOf(needle);
-    while (i !== -1 && out.length < 20000) {
-      out.push(i);
-      i = hay.indexOf(needle, i + needle.length);
-    }
-    return out;
-  }, [text, query]);
+  // Cap matches so a pathological query on a huge file stays responsive.
+  const matches = useMemo(() => findAllOccurrences(text, query, 20000), [text, query]);
 
   // On each new query, jump to the first match.
   useEffect(() => {
