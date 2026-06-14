@@ -1,7 +1,7 @@
 {
   "name": "jterm",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A fast, native terminal for macOS and Windows with tabs, split panes, and full mouse support",
   "license": "MIT",
   "author": "Yosef Ashenafi",

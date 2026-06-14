@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_Nothing yet. See the [roadmap](README.md#roadmap)._
+
+## [0.2.0] - 2026-06-14
+
 ### Added
 
+- **Linux builds**: the release pipeline now publishes `.deb`, AppImage, and
+  `.rpm` packages alongside the macOS and Windows installers.
 - **Publish to GitHub**: from Source Control, create a new public or private
   repository and push the current branch in one step (via the GitHub CLI), with
   a clickable link to the new repo. Plus discarding individual or all changes.
@@ -76,5 +82,6 @@ tabs, recursive split panes, full mouse support, and a VS Code-style workspace.
   files larger than 2 MB, and cancels superseded queries so rapid typing never
   piles up scans.
 
-[Unreleased]: https://github.com/yosefashenafi/jterm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/yosefashenafi/jterm/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/yosefashenafi/jterm/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/yosefashenafi/jterm/releases/tag/v0.1.0
