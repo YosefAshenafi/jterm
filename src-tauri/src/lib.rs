@@ -626,6 +626,50 @@ fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
     }
 }
 
+/// Locate the GitHub CLI. An app launched from Finder inherits a minimal PATH
+/// that usually omits Homebrew, so fall back to the common install locations.
+fn find_gh() -> Option<String> {
+    if let Ok(path) = std::env::var("PATH") {
+        for dir in std::env::split_paths(&path) {
+            let p = dir.join("gh");
+            if p.is_file() {
+                return Some(p.to_string_lossy().into_owned());
+            }
+        }
+    }
+    for cand in ["/opt/homebrew/bin/gh", "/usr/local/bin/gh", "/usr/bin/gh"] {
+        if std::path::Path::new(cand).is_file() {
+            return Some(cand.to_string());
+        }
+    }
+    None
+}
+
+/// Run a `gh` subcommand in `cwd`. Errors carry gh's own stderr (e.g. the
+/// "run `gh auth login`" hint) so the panel can show something actionable.
+fn run_gh(cwd: &str, args: &[&str]) -> Result<String, String> {
+    let gh = find_gh().ok_or_else(|| {
+        "GitHub CLI (gh) was not found. Install it from https://cli.github.com, \
+         then run `gh auth login`."
+            .to_string()
+    })?;
+    let out = std::process::Command::new(gh)
+        .current_dir(cwd)
+        .args(args)
+        .output()
+        .map_err(|e| format!("failed to run gh: {e}"))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+    } else {
+        let err = String::from_utf8_lossy(&out.stderr).into_owned();
+        Err(if err.trim().is_empty() {
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        } else {
+            err
+        })
+    }
+}
+
 #[derive(Serialize)]
 struct GitFile {
     path: String,
@@ -843,6 +887,45 @@ async fn git_init(path: String) -> Result<String, String> {
     blocking(move || run_git(&path, &["init"])).await
 }
 
+/// Publish a local repo with no remote to a brand-new GitHub repository and push
+/// the current branch — the VS Code "Publish Branch" flow. `private` chooses the
+/// visibility. Uses the GitHub CLI for repo creation and auth.
+#[tauri::command]
+async fn git_publish(path: String, name: String, private: bool) -> Result<String, String> {
+    blocking(move || {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("Repository name is empty".into());
+        }
+        // gh pushes the current branch, so there must be a commit to push.
+        if run_git(&path, &["rev-parse", "--verify", "HEAD"]).is_err() {
+            return Err("Nothing to publish yet — make your first commit, then publish.".into());
+        }
+        // If a remote is already configured, the branch just needs pushing with
+        // upstream tracking — creating a new GitHub repo would fail on the
+        // existing remote, so push instead.
+        let remotes = run_git(&path, &["remote"]).unwrap_or_default();
+        if let Some(remote) = remotes.split_whitespace().next() {
+            let branch = run_git(&path, &["symbolic-ref", "--short", "HEAD"]).unwrap_or_default();
+            let branch = branch.trim();
+            if branch.is_empty() {
+                return Err("Could not determine the current branch.".into());
+            }
+            return run_git(&path, &["push", "-u", remote, branch]);
+        }
+        let visibility = if private { "--private" } else { "--public" };
+        // Creates the GitHub repo, wires up `origin`, and pushes the branch.
+        run_gh(
+            &path,
+            &[
+                "repo", "create", name, visibility,
+                "--source", &path, "--remote", "origin", "--push",
+            ],
+        )
+    })
+    .await
+}
+
 /// Spawn a shell in a new PTY; returns the pty id used by the other commands.
 #[tauri::command]
 async fn pty_spawn(
@@ -932,7 +1015,8 @@ pub fn run() {
             git_diff,
             git_commit,
             git_push,
-            git_init
+            git_init,
+            git_publish
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
