@@ -341,6 +341,9 @@ interface StoreApi {
   /** Bumped each time the search view is (re)opened, so its input can refocus. */
   searchNonce: number;
   toggleSidebar(): void;
+  /** Fully hide the sidebar: drops both the pinned-open and hover-peek state, so
+   * it disappears immediately even while the pointer is still over it. */
+  hideSidebar(): void;
   setSidebarOpen(open: boolean): void;
   setProjectRoot(path: string | null): void;
   setSidebarView(view: SidebarView): void;
@@ -512,6 +515,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     editorMapDispatch({ type: "prune", ids });
   }, [state.tabs]);
 
+  // Peek (hover-reveal) is meaningful only while the sidebar isn't pinned. Once
+  // it's pinned open, drop any leftover peek so it can't linger as a stale
+  // "still visible" flag — otherwise hiding the sidebar would wait for the
+  // pointer to leave (the only thing that normally clears peek).
+  useEffect(() => {
+    if (sidebarOpen) setSidebarPeek(false);
+  }, [sidebarOpen]);
+
   // Persist tab titles across restarts.
   useEffect(() => {
     saveSnapshot(state.tabs, state.activeTabId);
@@ -527,6 +538,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       sidebarView,
       searchNonce,
       toggleSidebar: () => setSidebarOpen((v) => !v),
+      hideSidebar: () => {
+        setSidebarOpen(false);
+        setSidebarPeek(false);
+      },
       setSidebarOpen,
       sidebarPeek,
       setSidebarPeek,
