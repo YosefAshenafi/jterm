@@ -30,7 +30,6 @@ describe("splitPane", () => {
     const { root: r2, newLeafId: c } = splitPane(r1, b, "column");
 
     expect(leafOrder(r2)).toEqual([a.id, b, c]);
-    // The original sibling subtree is reused untouched.
     expect((r2 as SplitNode).children[0]).toBe(a);
   });
 
@@ -57,7 +56,7 @@ describe("insertSplit", () => {
 
     expect(root.type).toBe("split");
     expect(root.direction).toBe("row");
-    expect(root.children[0]).toBe(dropped); // before => first
+    expect(root.children[0]).toBe(dropped);
     expect(root.children[1]).toBe(a);
     expect(leafOrder(root)).toEqual([dropped.id, a.id]);
   });
@@ -79,7 +78,6 @@ describe("insertSplit", () => {
     const after = insertSplit(r1, b, dropped, "column", false);
 
     expect(leafOrder(after)).toEqual([a.id, b, dropped.id]);
-    // The untouched sibling subtree is reused by reference.
     expect((after as SplitNode).children[0]).toBe(a);
   });
 
@@ -122,7 +120,6 @@ describe("setSplitSizes", () => {
 
     const resized = setSplitSizes(root, split.id, [0.3, 0.7]) as SplitNode;
     expect(resized.sizes).toEqual([0.3, 0.7]);
-    // Immutability: the original node is not mutated.
     expect(split.sizes).toEqual([0.5, 0.5]);
   });
 });

@@ -1,6 +1,3 @@
-// Lives in its own module (not workspace.ts) so the terminal manager can quote
-// paths without a circular import — workspace.ts imports the manager.
-
 const isWindows = /windows/i.test(navigator.userAgent);
 
 /** Quote a path for insertion into the pane's shell (`cd` from the file tree,

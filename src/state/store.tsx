@@ -1,6 +1,3 @@
-// Global app state: tabs, the active tab, and each tab's pane tree.
-// Exposed to components as a small typed API backed by useReducer.
-
 import {
   createContext,
   Dispatch,
@@ -86,7 +83,7 @@ function saveSnapshot(tabs: Tab[], activeTabId: string): void {
   };
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(data));
-  } catch { /* quota exceeded — silently ignore */ }
+  } catch { }
 }
 
 function loadSnapshot(): { tabs: TabSnapshot[]; activeIndex: number } | null {
@@ -174,7 +171,7 @@ function closeTab(s: AppState, tabId: string): AppState {
   if (index === -1) return s;
   const tabs = s.tabs.filter((t) => t.id !== tabId);
   if (tabs.length === 0) {
-    return initialState(); // always keep at least one tab open
+    return initialState();
   }
   let activeTabId = s.activeTabId;
   if (activeTabId === tabId) {
@@ -212,7 +209,6 @@ function reducer(state: AppState, action: Action): AppState {
         action.direction,
         action.leaf
       );
-      // A new split should be visible, so leave any zoom.
       return updateTab(state, tab.id, { root, activePaneId: newLeafId, zoomedPaneId: null });
     }
     case "close-pane": {
@@ -223,7 +219,6 @@ function reducer(state: AppState, action: Action): AppState {
       const leaves = collectLeaves(root);
       const stillActive = leaves.some((l) => l.id === tab.activePaneId);
       const activePaneId = stillActive ? tab.activePaneId : firstLeaf(root).id;
-      // Drop the zoom if the zoomed pane is the one that went away.
       const zoomedPaneId =
         tab.zoomedPaneId && leaves.some((l) => l.id === tab.zoomedPaneId)
           ? tab.zoomedPaneId
@@ -236,7 +231,6 @@ function reducer(state: AppState, action: Action): AppState {
       const tab = state.tabs.find((t) => t.id === action.tabId);
       if (!tab) return state;
       const zoomedPaneId = tab.zoomedPaneId === action.paneId ? null : action.paneId;
-      // Zooming a pane also focuses it.
       return updateTab(state, tab.id, { zoomedPaneId, activePaneId: action.paneId });
     }
     case "cycle-pane": {
@@ -246,7 +240,6 @@ function reducer(state: AppState, action: Action): AppState {
       if (order.length < 2) return state;
       const i = order.indexOf(tab.activePaneId);
       const next = order[(i + action.delta + order.length) % order.length];
-      // Cycling navigates the whole layout, so exit zoom.
       return updateTab(state, tab.id, { activePaneId: next, zoomedPaneId: null });
     }
     case "resize-split": {
@@ -257,7 +250,6 @@ function reducer(state: AppState, action: Action): AppState {
       });
     }
     case "set-title": {
-      // Shell-driven title: never override a name the user typed themselves.
       const tab = state.tabs.find((t) => t.id === action.tabId);
       if (!tab || tab.titleManual) return state;
       return updateTab(state, action.tabId, { title: action.title });
@@ -278,19 +270,18 @@ function reducer(state: AppState, action: Action): AppState {
       const leaf: LeafNode = { type: "leaf", id: paneId };
 
       if (target.kind === "pane") {
-        // Rearrange within the visible tab: drop on an edge of another pane.
         if (target.paneId === paneId) return state;
         const inSrc = collectLeaves(src.root).some((l) => l.id === target.paneId);
-        if (!inSrc) return state; // only the on-screen tab's panes are targetable
+        if (!inSrc) return state;
         const removed = removePane(src.root, paneId);
-        if (!removed) return state; // target keeps the tree non-empty
+        if (!removed) return state;
         const { direction, before } = zoneToSplit(target.zone);
         const root = insertSplit(removed, target.paneId, leaf, direction, before);
         return updateTab(state, src.id, { root, activePaneId: paneId, zoomedPaneId: null });
       }
 
       if (target.kind === "tab") {
-        if (target.tabId === src.id) return state; // already lives here
+        if (target.tabId === src.id) return state;
         const dest = state.tabs.find((t) => t.id === target.tabId);
         if (!dest) return state;
         const destRoot = insertSplit(dest.root, dest.activePaneId, leaf, "row", false);
@@ -300,11 +291,10 @@ function reducer(state: AppState, action: Action): AppState {
           if (t.id === src.id && srcRoot) return { ...t, ...rebindTab(src, srcRoot) };
           return t;
         });
-        if (!srcRoot) tabs = tabs.filter((t) => t.id !== src.id); // source emptied
+        if (!srcRoot) tabs = tabs.filter((t) => t.id !== src.id);
         return { tabs, activeTabId: dest.id };
       }
 
-      // new-tab: detach into a fresh tab (no-op if it is the tab's only pane).
       const srcRoot = removePane(src.root, paneId);
       if (!srcRoot) return state;
       const newTab: Tab = {
@@ -328,7 +318,6 @@ interface StoreApi {
   dispatch: Dispatch<Action>;
   /** Pane that currently has focus in the active tab, if any. */
   activePaneId: string | null;
-  // Project workspace (toolbar + sidebar).
   sidebarOpen: boolean;
   /** Sidebar is temporarily revealed by hovering the left edge (not pinned). */
   sidebarPeek: boolean;
@@ -365,7 +354,6 @@ interface StoreApi {
   renameTab(tabId: string, title: string): void;
   /** Move a pane to a drop target (another pane's edge, a tab, or a new tab). */
   movePane(paneId: string, target: DropTarget): void;
-  // Bottom terminal panel (⌘J): VS Code-style, with its own tabs of terminals.
   panelOpen: boolean;
   /** Pane ids of the terminals living in the bottom panel, in tab order. */
   panelTerminals: string[];
@@ -376,12 +364,10 @@ interface StoreApi {
   addPanelTerminal(): void;
   closePanelTerminal(id: string): void;
   selectPanelTerminal(id: string): void;
-  // User settings (appearance, terminal prefs).
   settings: Settings;
   updateSettings(patch: Partial<Settings>): void;
   /** Zoom a surface's font: delta +1/-1 steps, 0 resets to default. */
   zoom(surface: "editor" | "terminal", delta: number): void;
-  // Editor (file viewer/editor beside the folder tree).
   editor: EditorState;
   focusRegion: FocusRegion;
   setFocusRegion(region: FocusRegion): void;
@@ -389,7 +375,6 @@ interface StoreApi {
   showTerminalView(): void;
   /** Open a file in the editor; pass `line` (1-based) to reveal/select it. */
   openFile(path: string, line?: number): void;
-  // VS Code-style quick-open / go-to-line palette and the find bar.
   paletteMode: "files" | "goto" | null;
   openQuickFiles(): void;
   openGoToLine(): void;
@@ -453,8 +438,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toastTimer.current = setTimeout(() => setToast(null), opts?.duration ?? 4000);
   };
 
-  // Apply settings to the document (CSS variables) and live terminals, and
-  // persist them. Runs on mount so a saved accent/font is restored at startup.
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty("--accent", settings.accent);
@@ -477,15 +460,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     state.tabs.find((t) => t.id === activeTabId)?.activePaneId ?? null;
   const projectRoot = projectRootMap[activeTabId] ?? null;
 
-  // The editor (open files) is per-tab; the active tab's buffers are what the
-  // workspace renders, and `editorDispatch` always targets the active tab.
   const editor = editorMap[activeTabId] ?? emptyEditor;
   const editorDispatch = (action: EditorAction) =>
     editorMapDispatch({ ...action, tabId: activeTabId });
 
-  // Per-tab project root: track the active pane's CWD while the sidebar is open
-  // so the file tree (and search/git) scope to the current folder. Polled so a
-  // `cd` in the terminal re-scopes the explorer without re-toggling it.
   useEffect(() => {
     if (!(sidebarOpen || sidebarPeek) || !activePaneId) return;
     let cancelled = false;
@@ -504,7 +482,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
   }, [activePaneId, sidebarOpen, sidebarPeek, activeTabId]);
 
-  // Keep the maps tidy — remove entries for closed tabs.
   useEffect(() => {
     const ids = new Set(state.tabs.map((t) => t.id));
     setProjectRootMap((prev) => {
@@ -515,25 +492,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     editorMapDispatch({ type: "prune", ids });
   }, [state.tabs]);
 
-  // Peek (hover-reveal) is meaningful only while the sidebar isn't pinned. Once
-  // it's pinned open, drop any leftover peek so it can't linger as a stale
-  // "still visible" flag — otherwise hiding the sidebar would wait for the
-  // pointer to leave (the only thing that normally clears peek).
   useEffect(() => {
     if (sidebarOpen) setSidebarPeek(false);
   }, [sidebarOpen]);
 
-  // One-time cleanup: the Extensions feature was removed, so drop its now-orphaned
-  // persisted key on startup.
   useEffect(() => {
     try {
       localStorage.removeItem("jterm.extensions");
     } catch {
-      /* storage unavailable — nothing to clean */
     }
   }, []);
 
-  // Persist tab titles across restarts.
   useEffect(() => {
     saveSnapshot(state.tabs, state.activeTabId);
   }, [state.tabs, state.activeTabId]);
@@ -562,7 +531,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         try {
           localStorage.setItem(SIDEBAR_WIDTH_KEY, String(clamped));
         } catch {
-          /* storage unavailable — width just won't persist across restarts */
         }
       },
       setProjectRoot: (root) => {
@@ -581,7 +549,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       newTab: async () => {
         const leaf = makeLeaf();
         const tabId = newId("tab");
-        // Close sidebar first — the folder belongs to the previous tab.
         if (sidebarOpen) {
           setSidebarOpen(false);
         }
@@ -591,8 +558,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setProjectRootMap((prev) => ({ ...prev, [tabId]: h }));
       },
       closeTab: (tabId) => dispatch({ type: "close-tab", tabId }),
-      // Each tab keeps its own open files, so switching restores whatever that
-      // tab was last showing — the file it was viewing, or the terminal grid.
       selectTab: (tabId) => {
         const target = editorMap[tabId] ?? emptyEditor;
         setFocusRegion(target.activePath ? "editor" : "terminal");
@@ -607,9 +572,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       split: (direction) => {
         const tab = state.tabs.find((t) => t.id === state.activeTabId);
         if (!tab) return;
-        // The new pane's shell starts in the split source's working directory.
-        // The leaf is made here (not in the reducer) so its cwd can be handed
-        // to the terminal manager before the pane mounts and spawns.
         const leaf = makeLeaf();
         terminals.setSpawnCwd(leaf.id, resolveCwd(tab.activePaneId));
         dispatch({ type: "split", direction, leaf });
@@ -645,8 +607,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       activePanelTerminal,
       togglePanel: () => {
         const willOpen = !panelOpen;
-        // Opening an empty panel spawns its first terminal in the active
-        // terminal's directory so README commands run where the project lives.
         if (willOpen && panelTerminals.length === 0) {
           const id = newId("panel");
           terminals.setSpawnCwd(id, resolveCwd(activePaneId));
@@ -710,7 +670,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       paletteMode,
       openQuickFiles: () => {
-        // Ensure the active tab has a resolved project root for the picker.
         if (!projectRootMap[activeTabId]) {
           resolveCwd(activePaneId).then((cwd) =>
             setProjectRootMap((prev) => ({ ...prev, [activeTabId]: cwd }))
@@ -755,7 +714,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveFile: async (path) => {
         const f = editor.files.find((x) => x.path === path);
         if (!f || f.saved === null || !isDirty(f)) return;
-        const written = f.draft; // snapshot — the user may keep typing mid-save
+        const written = f.draft;
         try {
           await invoke("write_file", { path, content: written });
           editorDispatch({ type: "saved", path, text: written });
@@ -775,9 +734,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (!discard) return;
         }
         editorDispatch({ type: "close", path });
-        // Nothing left to edit — hand the keyboard back to the terminal. The
-        // flag alone only reroutes shortcuts; the terminal needs real DOM focus
-        // too, or typed characters would land on <body> until a click.
         if (editor.files.length <= 1) {
           setFocusRegion("terminal");
           if (activePaneId) terminals.focus(activePaneId);

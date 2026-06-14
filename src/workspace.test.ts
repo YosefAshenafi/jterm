@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-// workspace.ts pulls in the terminal manager (xterm + Tauri IPC) for
-// resolveCwd; stub those imports so the pure path helpers test in isolation.
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("@tauri-apps/api/path", () => ({ homeDir: vi.fn(async () => "/home/user") }));
 vi.mock("./terminal/manager", () => ({

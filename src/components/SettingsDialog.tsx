@@ -29,8 +29,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { settings, updateSettings } = useStore();
   const [tab, setTab] = useState<Tab>("appearance");
 
-  // Version comes from the running app (tauri.conf.json), so the About box
-  // can't drift from the build the way a hardcoded string would.
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
@@ -54,8 +52,6 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const setLineHeight = (n: number) =>
     updateSettings({ lineHeight: Math.min(2, Math.max(1, Math.round(n * 10) / 10)) });
 
-  // Buttons act on click so Enter/Space work, but swallow pointerdown so a
-  // mouse press never steals focus from the terminal behind the dialog.
   const keepFocus = (e: React.PointerEvent) => e.preventDefault();
 
   const preview = (

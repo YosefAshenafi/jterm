@@ -72,12 +72,15 @@ Tauri commands are the bridge between the UI and the OS. To add one:
 
 - **Rust**: run `cargo fmt` before committing. CI checks formatting and runs
   `cargo clippy`. Prefer returning `Result` over `unwrap()` in command paths.
-- **TypeScript**: 2-space indent, the existing import ordering, and the comment
-  style already in the files (explain *why*, not *what*). `tsc` runs in strict
-  mode with `noUnusedLocals`/`noUnusedParameters`, so dead code fails the build.
-- Keep comments where the reasoning is non-obvious. This codebase has a fair
-  number, and they earn their keep, so match that bar rather than over- or
-  under-commenting.
+- **TypeScript**: 2-space indent and the existing import ordering. `tsc` runs in
+  strict mode with `noUnusedLocals`/`noUnusedParameters`, so dead code fails the
+  build.
+- **Comments**: keep the code self-documenting and free of inline comments.
+  Doc-comments are the exception — a `/** … */` (TypeScript) or `///` / `//!`
+  (Rust) directly above a function, type, or module is welcome to describe its
+  contract. Anything that needs more explanation than a clear name and a
+  doc-comment belongs in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), not in a
+  `//` comment.
 
 ## Tests
 

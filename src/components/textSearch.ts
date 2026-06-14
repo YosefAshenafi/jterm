@@ -1,8 +1,3 @@
-// Shared case-insensitive substring search: the start offsets of every
-// non-overlapping occurrence of `needle` in `haystack`. An empty needle yields
-// no matches — `indexOf("")` matches at every position without advancing, which
-// would loop forever. `limit` caps the result count to keep huge buffers
-// responsive (the find bar passes one; the result-row highlighter doesn't need to).
 export function findAllOccurrences(
   haystack: string,
   needle: string,

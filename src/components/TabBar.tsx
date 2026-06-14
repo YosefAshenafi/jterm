@@ -14,7 +14,6 @@ export function TabBar() {
   const dragging = dnd.draggingPaneId !== null;
   const newTabActive = dragging && dnd.dropTarget?.kind === "new-tab";
 
-  // Focus + select the field whenever we enter edit mode.
   useEffect(() => {
     if (editingId) inputRef.current?.select();
   }, [editingId]);
@@ -47,15 +46,11 @@ export function TabBar() {
             className={`tab${tab.id === state.activeTabId ? " tab-active" : ""}${
               dropTarget ? " tab-drop-target" : ""
             }`}
-            // Select on pointerdown (not click) so switching feels instant,
-            // like native tab strips — but only for the primary button.
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               selectTab(tab.id);
             }}
             onKeyDown={(e) => {
-              // Only when the tab itself is focused — keys from the close
-              // button or rename input must not also switch tabs.
               if (e.target !== e.currentTarget) return;
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
@@ -87,10 +82,6 @@ export function TabBar() {
             <button
               className="tab-close"
               aria-label="Close tab"
-              // preventDefault on pointerdown keeps focus in the terminal;
-              // closing happens on click so keyboard activation works.
-              // stopPropagation in both handlers so the parent tab never
-              // selects when closing.
               onPointerDown={(e) => {
                 e.preventDefault();
                 e.stopPropagation();

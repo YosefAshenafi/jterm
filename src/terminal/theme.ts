@@ -1,13 +1,9 @@
-// Terminal appearance. P4 will move these into a user config file; for now they
-// are the single source of truth for font + colors so the UI and xterm match.
-
 import type { ITheme } from "@xterm/xterm";
 
 export const FONT_FAMILY =
   '"SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Monaco, "Courier New", monospace';
 export const FONT_SIZE = 13;
 
-// A calm, low-contrast dark scheme.
 export const DEFAULT_THEME: ITheme = {
   background: "#0d1017",
   foreground: "#c5c9d1",

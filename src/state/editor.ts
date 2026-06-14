@@ -1,8 +1,3 @@
-// State for the file editor that opens beside the folder tree. Each open file
-// is a buffer with the on-disk contents (`saved`) and the current editor text
-// (`draft`); they differ exactly when the buffer is dirty. Buffers are global —
-// independent of which terminal tab is active.
-
 export interface FileBuffer {
   path: string;
   name: string;
@@ -38,7 +33,6 @@ export type EditorAction =
   | { type: "error"; path: string; error: string }
   | { type: "select"; path: string }
   | { type: "close"; path: string }
-  // Deselect every file → the workspace shows the Terminal tab (the grid).
   | { type: "show-terminal" };
 
 /** A buffer is dirty once its draft diverges from the saved contents. */
@@ -56,7 +50,6 @@ function patch(state: EditorState, path: string, p: Partial<FileBuffer>): Editor
 export function editorReducer(state: EditorState, action: EditorAction): EditorState {
   switch (action.type) {
     case "open": {
-      // Re-opening an already-open file just focuses its tab.
       if (state.files.some((f) => f.path === action.path)) {
         return { ...state, activePath: action.path };
       }
@@ -101,7 +94,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         diff: false,
       });
     case "image-loaded":
-      // `saved: ""` marks it loaded (not an error); images aren't editable.
       return patch(state, action.path, {
         saved: "",
         draft: "",
@@ -114,9 +106,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case "edit":
       return patch(state, action.path, { draft: action.draft, error: null, diff: false });
     case "saved":
-      // `text` is the content that was actually written, captured before the
-      // write. Stamping the *current* draft instead would mark keystrokes typed
-      // during the in-flight save as saved when they never reached disk.
       return patch(state, action.path, { saved: action.text, error: null });
     case "error":
       return patch(state, action.path, { loading: false, error: action.error });
@@ -132,7 +121,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       const files = state.files.filter((f) => f.path !== action.path);
       let activePath = state.activePath;
       if (activePath === action.path) {
-        // Fall back to the neighbour that slides into this slot.
         activePath = files.length ? files[Math.min(idx, files.length - 1)].path : null;
       }
       return { files, activePath };
@@ -142,8 +130,6 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
   }
 }
 
-// Open files are per-tab: each tab id maps to its own EditorState, so a newly
-// created tab starts empty instead of inheriting another tab's open files.
 export type EditorMap = Record<string, EditorState>;
 
 export type EditorMapAction =
@@ -151,7 +137,6 @@ export type EditorMapAction =
   | { type: "prune"; ids: Set<string> };
 
 export function editorMapReducer(state: EditorMap, action: EditorMapAction): EditorMap {
-  // Drop entries for tabs that no longer exist.
   if (action.type === "prune") {
     let changed = false;
     const next: EditorMap = {};

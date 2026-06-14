@@ -28,8 +28,6 @@ interface Props {
   onCwdChange?: (cwd: string) => void;
 }
 
-// Size of the top-right "deliberate" zone that reveals the pane tools. They stay
-// hidden everywhere else so they never pop up while you're just working.
 const HOT_W = 96;
 const HOT_H = 48;
 
@@ -60,15 +58,11 @@ export function TerminalPane({
   const cwdRef = useRef(cwd);
   cwdRef.current = cwd;
 
-  // The drop indicator this pane should paint, if it is the current target.
   const dropZone =
     dnd.dropTarget?.kind === "pane" && dnd.dropTarget.paneId === paneId
       ? dnd.dropTarget.zone
       : null;
 
-  // Drag the pane by its header: split it onto another pane, drop it on a tab, or
-  // detach it to a new tab. A small movement threshold keeps plain header clicks
-  // from starting a drag.
   const startHeaderDrag = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -100,9 +94,6 @@ export function TerminalPane({
     );
   };
 
-  // Reveal the tools only when the pointer is near the active pane's top-right
-  // corner. React bails out when the boolean is unchanged, so moving the mouse
-  // around the rest of the terminal is cheap.
   const trackTools = (e: React.PointerEvent) => {
     const r = e.currentTarget.getBoundingClientRect();
     const inHot = e.clientX >= r.right - HOT_W && e.clientY <= r.top + HOT_H;
@@ -117,19 +108,13 @@ export function TerminalPane({
 
     const ro = new ResizeObserver(() => terminals.fit(paneId));
     ro.observe(el);
-    return () => ro.disconnect(); // never dispose here — the manager owns lifetime
+    return () => ro.disconnect();
   }, [paneId]);
 
   useEffect(() => {
     if (active) terminals.focus(paneId);
   }, [active, paneId]);
 
-  // First pane: name it once from the directory its shell starts in, then freeze
-  // that name. It also seeds the tab title (once) and never follows later `cd`s
-  // or shell-emitted titles. We wait for the pty so we read the real starting
-  // directory rather than the brief home-dir fallback.
-  // Other panes: keep the header in sync with the shell's working directory while
-  // focused, so it reflects where you `cd` to.
   useEffect(() => {
     let cancelled = false;
 
@@ -142,7 +127,7 @@ export function TerminalPane({
         if (cancelled) return;
         if (terminals.getPtyId(paneId) == null && attempts < 20) {
           attempts++;
-          setCwd((prev) => prev ?? dir); // show the starting dir while we wait
+          setCwd((prev) => prev ?? dir);
           timer = setTimeout(capture, 500);
           return;
         }
@@ -187,14 +172,10 @@ export function TerminalPane({
         {basename(cwd ?? "~")}
       </div>
 
-      {/* xterm's DOM is appended here by the manager (kept outside React). */}
       <div ref={ref} className="terminal-mount" />
 
-      {/* Drop indicator: the half this pane would give up to the dragged one. */}
       {dropZone && <div className={`pane-drop-overlay zone-${dropZone}`} />}
 
-      {/* Pane tools: maximize/restore + close. Hidden until the pointer reaches
-          the top-right corner (or one gains keyboard focus). ⌘M / ⌘W mirror them. */}
       {active && (
         <div className={`pane-tools${showTools ? " pane-tools-visible" : ""}`}>
           {canZoom && (
@@ -202,8 +183,6 @@ export function TerminalPane({
               className="pane-tool"
               aria-label={zoomed ? "Restore split" : "Maximize terminal"}
               title={zoomed ? "Restore split  ·  ⌘M" : "Maximize  ·  ⌘M"}
-              // Swallow the press so the terminal keeps focus; the action runs
-              // on click so keyboard Enter/Space still works.
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -220,7 +199,6 @@ export function TerminalPane({
             className="pane-tool pane-tool-close"
             aria-label="Close terminal"
             title="Close terminal  ·  ⌘W"
-            // Same focus-preserving press / click-activated pattern as above.
             onPointerDown={(e) => {
               e.stopPropagation();
               e.preventDefault();

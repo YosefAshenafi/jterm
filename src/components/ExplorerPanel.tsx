@@ -71,8 +71,6 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
         className={`tree-row${active ? " tree-row-active" : ""}`}
         style={indentStyle(depth)}
         title={entry.path}
-        // Act on click so Enter/Space work too; swallowing pointerdown keeps
-        // mouse clicks from stealing focus away from the terminal.
         onPointerDown={(e) => e.preventDefault()}
         onClick={() => ctx.onFile(entry.path)}
         onContextMenu={(e) => ctx.onMenu(e, entry)}
@@ -115,9 +113,6 @@ export function ExplorerPanel() {
   const [fallbackRoot, setFallbackRoot] = useState<string | null>(null);
   const activePath = editor.activePath;
 
-  // Until the store has a project root (e.g. the sidebar was just peeked open),
-  // scope the tree to the active terminal's working directory so it shows the
-  // current folder rather than "No folder open".
   useEffect(() => {
     if (projectRoot) {
       setFallbackRoot(null);
@@ -131,13 +126,12 @@ export function ExplorerPanel() {
   }, [projectRoot, activePaneId]);
   const root = projectRoot ?? fallbackRoot;
 
-  // Reveal the active file like VS Code: expand the folders that lead to it.
   useEffect(() => {
     if (!activePath || !root) return;
     const base = root.replace(/[\\/]+$/, "");
     if (activePath !== base && !activePath.startsWith(base + "/")) return;
     const parts = activePath.slice(base.length).replace(/^[\\/]+/, "").split("/");
-    parts.pop(); // drop the filename — only expand its directories
+    parts.pop();
     const ancestors: string[] = [];
     let cur = base;
     for (const p of parts) {
@@ -158,8 +152,6 @@ export function ExplorerPanel() {
     });
   }, [activePath, root]);
 
-  // Scroll the highlighted row into view once it (and its lazily-loaded parent
-  // folders) have rendered.
   useEffect(() => {
     if (!activePath) return;
     let tries = 0;
@@ -188,8 +180,6 @@ export function ExplorerPanel() {
         return next;
       }),
     onFile: (path) => openFile(path),
-    // "\r" mirrors a real Enter keypress: Unix line discipline maps CR to NL
-    // on input, and Windows ConPTY only executes the line on CR — not LF.
     onCd: (path) => activePaneId && terminals.sendText(activePaneId, `cd ${shellQuote(path)}\r`),
     onMenu: (e, entry) => {
       e.preventDefault();
@@ -197,9 +187,6 @@ export function ExplorerPanel() {
     },
   };
 
-  // Right-click actions for a file/folder. "Copy Path" puts the raw path on the
-  // system clipboard (ready for ⌘V anywhere); "Paste to Terminal" types the
-  // shell-quoted path straight into the focused terminal, ready to run.
   const menuItems = (entry: Entry): MenuItem[] => {
     const items: MenuItem[] = entry.is_dir
       ? [{ label: "Open in Terminal (cd)", disabled: !activePaneId, onClick: () => ctx.onCd(entry.path) }]
