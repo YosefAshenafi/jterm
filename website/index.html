@@ -3,19 +3,19 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>jterm — a fast, native terminal with a workspace when you want one</title>
+    <title>jterm: a fast, native terminal for engineers running many shells at once</title>
     <meta
       name="description"
-      content="jterm is a fast, native terminal for macOS and Windows: a true PTY per pane, GPU text, full mouse support, recursive split panes, and a VS Code-style file tree, editor, search, and Git — only when you reach for them."
+      content="jterm is a fast, native terminal for macOS and Windows, built for senior and AI engineers who run many shells at once with full control of files, directories, and Git, all in view and highlighted."
     />
     <meta name="theme-color" content="#0b0d11" />
     <link rel="icon" type="image/png" href="assets/icon.png" />
 
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="jterm — terminal first, workspace when you want it" />
+    <meta property="og:title" content="jterm: stay on top of every terminal and every file" />
     <meta
       property="og:description"
-      content="A fast, native terminal for macOS and Windows. True PTY per pane, GPU text, full mouse, split panes, and a built-in workspace. Open source, MIT."
+      content="Full control of your files, directories, and architecture while you run a dozen terminals at once. The file tree, open file, and Git status stay in view and highlighted. Open source, MIT."
     />
     <meta property="og:image" content="assets/jterm.png" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -80,15 +80,15 @@
       <section class="hero">
         <div class="container hero-grid">
           <div class="hero-copy">
-            <p class="eyebrow">Open source · Native · MIT</p>
+            <p class="eyebrow">Built for senior &amp; AI engineers</p>
             <h1 class="hero-title">
-              Terminal first.<br /><span class="grad">Workspace when you want it.</span>
+              Stay on top of <span class="grad">every terminal and every file.</span>
             </h1>
             <p class="hero-sub">
-              jterm is a fast, native terminal — a true PTY per pane, GPU text, and full mouse
-              reporting so <code>vim</code>, <code>htop</code> and <code>lazygit</code> just work.
-              On top sits a VS Code-style tree, editor, search, and Git — only when you reach for
-              them.
+              jterm gives you full control of your files, directories, and the project's
+              architecture while you run a dozen live shells at once. Split as many terminals as the
+              work needs, and keep the file tree, the open file, and Git status all in view, each one
+              highlighted so nothing slips past you.
             </p>
 
             <div class="hero-cta">
@@ -121,21 +121,32 @@
                 </span>
               </div>
               <div class="term-body">
+                <div class="term-explorer reveal-1">
+                  <div class="term-side-head">Explorer</div>
+                  <div class="tree-row tree-dir">src</div>
+                  <div class="tree-row git-mod"><span class="tree-name">main.rs</span><span class="git-mark">M</span></div>
+                  <div class="tree-row git-add"><span class="tree-name">agent.rs</span><span class="git-mark">A</span></div>
+                  <div class="tree-row">lib.rs</div>
+                  <div class="tree-row tree-dir">model</div>
+                  <div class="tree-row git-mod"><span class="tree-name">train.py</span><span class="git-mark">M</span></div>
+                  <div class="tree-row git-unt"><span class="tree-name">notes.md</span><span class="git-mark">U</span></div>
+                </div>
                 <div class="term-pane term-pane-main">
-                  <div class="term-line"><span class="p">~/jterm</span> <span class="c">$</span> <span class="typed" data-text="cargo run --release"></span><span class="caret"></span></div>
-                  <div class="term-out reveal-1"><span class="ok">  Compiling</span> jterm v0.1.0</div>
+                  <div class="term-line"><span class="p">~/proj</span> <span class="c">$</span> <span class="typed" data-text="cargo run --release"></span><span class="caret"></span></div>
+                  <div class="term-out reveal-1"><span class="ok">  Compiling</span> proj v0.1.0</div>
                   <div class="term-out reveal-2"><span class="ok">   Finished</span> release in 0.8s</div>
-                  <div class="term-out reveal-3 dim">     Running `target/release/jterm`</div>
-                  <div class="term-line reveal-4"><span class="p">~/jterm</span> <span class="c">$</span> <span class="blink">▍</span></div>
+                  <div class="term-out reveal-3 dim">     Running `target/release/proj`</div>
+                  <div class="term-line reveal-4"><span class="p">~/proj</span> <span class="c">$</span> <span class="blink">▍</span></div>
                 </div>
                 <div class="term-pane term-pane-side reveal-3">
-                  <div class="term-side-head">htop</div>
-                  <div class="bar"><span class="bar-label">cpu</span><span class="bar-track"><i style="width:62%"></i></span></div>
-                  <div class="bar"><span class="bar-label">mem</span><span class="bar-track"><i style="width:38%" class="alt"></i></span></div>
-                  <div class="bar"><span class="bar-label">net</span><span class="bar-track"><i style="width:81%"></i></span></div>
+                  <div class="term-side-tab">train.py</div>
+                  <div class="term-out"><span class="ok">epoch 6</span> loss 0.271</div>
+                  <div class="term-out"><span class="ok">epoch 7</span> loss 0.214</div>
+                  <div class="term-out"><span class="ok">epoch 8</span> loss 0.182</div>
                   <div class="term-spark">
-                    <i style="height:30%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:70%"></i><i style="height:48%"></i><i style="height:88%"></i><i style="height:62%"></i><i style="height:74%"></i>
+                    <i style="height:82%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:52%"></i><i style="height:46%"></i><i style="height:38%"></i><i style="height:32%"></i><i style="height:27%"></i>
                   </div>
+                  <div class="term-out dim reveal-4">streaming logs…</div>
                 </div>
               </div>
             </div>
@@ -201,7 +212,7 @@
               </div>
               <h3>Git, all the way to GitHub</h3>
               <p>
-                Stage, unstage, discard, commit, and push from the Source Control panel — then
+                Stage, unstage, discard, commit, and push from the Source Control panel, then
                 <strong>Publish to GitHub</strong>, creating a public or private repo in one click.
               </p>
             </article>
@@ -224,7 +235,7 @@
               <h3>Search that never blocks</h3>
               <p>
                 Full-text search across the folder, fanned out over every core and cancelled the
-                moment you keep typing — so the window never freezes.
+                moment you keep typing, so the window never freezes.
               </p>
             </article>
 
@@ -282,7 +293,7 @@ pnpm tauri build</code></pre>
           <header class="section-head">
             <p class="kicker">Muscle memory</p>
             <h2>Keyboard-driven, mouse-friendly.</h2>
-            <p class="section-sub">macOS shortcuts shown — Windows/Linux use <kbd>Ctrl</kbd>+<kbd>Shift</kbd>.</p>
+            <p class="section-sub">macOS shortcuts shown. Windows/Linux use <kbd>Ctrl</kbd>+<kbd>Shift</kbd>.</p>
           </header>
           <div class="sc-grid">
             <div class="sc"><span class="keys"><kbd>⌘</kbd><kbd>T</kbd></span><span>New tab</span></div>
@@ -296,7 +307,7 @@ pnpm tauri build</code></pre>
             <div class="sc"><span class="keys"><kbd>⌘</kbd><kbd>B</kbd></span><span>Toggle explorer</span></div>
             <div class="sc"><span class="keys"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>F</kbd></span><span>Search folder</span></div>
             <div class="sc"><span class="keys"><kbd>⌘</kbd><kbd>⇧</kbd><kbd>G</kbd></span><span>Source control</span></div>
-            <div class="sc"><span class="keys"><kbd>⌘</kbd><kbd>1</kbd>–<kbd>9</kbd></span><span>Jump to tab</span></div>
+            <div class="sc"><span class="keys"><kbd>⌘</kbd><kbd>1</kbd><kbd>9</kbd></span><span>Jump to tab</span></div>
           </div>
         </div>
       </section>
@@ -344,7 +355,7 @@ pnpm tauri build</code></pre>
           </div>
 
           <p class="dl-foot">
-            Builds aren't code-signed yet — on first launch, right-click → <b>Open</b> on macOS, or
+            Builds aren't code-signed yet, so on first launch, right-click → <b>Open</b> on macOS, or
             <b>More info → Run anyway</b> on Windows.
             <a class="link-arrow inline" href="https://github.com/YosefAshenafi/jterm/releases" rel="noopener">
               All releases <span aria-hidden="true">→</span>
