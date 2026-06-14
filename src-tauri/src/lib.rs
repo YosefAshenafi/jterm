@@ -911,17 +911,23 @@ async fn git_publish(path: String, name: String, private: bool) -> Result<String
             if branch.is_empty() {
                 return Err("Could not determine the current branch.".into());
             }
-            return run_git(&path, &["push", "-u", remote, branch]);
+            run_git(&path, &["push", "-u", remote, branch])?;
+        } else {
+            let visibility = if private { "--private" } else { "--public" };
+            // Creates the GitHub repo, wires up `origin`, and pushes the branch.
+            run_gh(
+                &path,
+                &[
+                    "repo", "create", name, visibility,
+                    "--source", &path, "--remote", "origin", "--push",
+                ],
+            )?;
         }
-        let visibility = if private { "--private" } else { "--public" };
-        // Creates the GitHub repo, wires up `origin`, and pushes the branch.
-        run_gh(
-            &path,
-            &[
-                "repo", "create", name, visibility,
-                "--source", &path, "--remote", "origin", "--push",
-            ],
-        )
+        // Best-effort: hand back the repo's web URL so the UI can link to it.
+        // An empty string just means "published, link unknown".
+        Ok(run_gh(&path, &["repo", "view", "--json", "url", "--jq", ".url"])
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default())
     })
     .await
 }

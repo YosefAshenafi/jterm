@@ -4,6 +4,7 @@ import {
   readText as clipboardReadText,
   writeText as clipboardWriteText,
 } from "@tauri-apps/plugin-clipboard-manager";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { useStore } from "./state/store";
 import { collectLeaves } from "./state/tree";
 import { terminals } from "./terminal/manager";
@@ -275,8 +276,16 @@ export default function App() {
       </div>
       <CommandPalette />
       {store.toast && (
-        <div className="toast" role="status" onPointerDown={() => store.dismissToast()}>
-          {store.toast}
+        <div
+          className={`toast${store.toast.url ? " toast-link" : ""}`}
+          role="status"
+          title={store.toast.url ? "Open in browser" : undefined}
+          onClick={() => {
+            if (store.toast?.url) void openUrl(store.toast.url);
+            store.dismissToast();
+          }}
+        >
+          {store.toast.message}
         </div>
       )}
     </div>

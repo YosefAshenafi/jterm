@@ -56,6 +56,13 @@ export interface RevealTarget {
   line: number;
 }
 
+/** A transient status message. When `url` is set the toast is a clickable link
+ * (e.g. the newly published repository) that opens externally. */
+export interface Toast {
+  message: string;
+  url?: string;
+}
+
 const SNAPSHOT_KEY = "jterm_tab_titles";
 
 const SIDEBAR_WIDTH_KEY = "jterm.sidebarWidth";
@@ -392,7 +399,9 @@ interface StoreApi {
   /** Download an http(s) URL to the Downloads folder (terminal links). */
   downloadUrl(url: string): void;
   /** Transient status message (e.g. download result); null when hidden. */
-  toast: string | null;
+  toast: Toast | null;
+  /** Show a transient toast; pass `url` to make it a clickable external link. */
+  showToast(message: string, opts?: { url?: string; duration?: number }): void;
   dismissToast(): void;
   /** Open a diff view for a git file. */
   openDiffView(path: string, content: string): void;
@@ -433,12 +442,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [activePanelTerminal, setActivePanelTerminal] = useState<string | null>(null);
   const [paletteMode, setPaletteMode] = useState<"files" | "goto" | null>(null);
   const [findOpen, setFindOpen] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const flashToast = (msg: string) => {
-    setToast(msg);
+  const flashToast = (message: string, opts?: { url?: string; duration?: number }) => {
+    setToast({ message, url: opts?.url });
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 4000);
+    toastTimer.current = setTimeout(() => setToast(null), opts?.duration ?? 4000);
   };
 
   // Apply settings to the document (CSS variables) and live terminals, and
@@ -706,6 +715,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           .catch((e) => flashToast(`Download failed: ${e}`));
       },
       toast,
+      showToast: flashToast,
       dismissToast: () => setToast(null),
       reveal,
       clearReveal: () => setReveal(null),

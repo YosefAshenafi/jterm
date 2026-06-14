@@ -99,7 +99,7 @@ function FileRow({
 
 /** Source Control: branch, staged/unstaged changes, commit message + push. */
 export function GitPanel() {
-  const { activePaneId, openDiffView, setGitChangesCount } = useStore();
+  const { activePaneId, openDiffView, setGitChangesCount, showToast } = useStore();
   const [dir, setDir] = useState<string | null>(null);
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [loading, setLoading] = useState(false);
@@ -405,9 +405,18 @@ export function GitPanel() {
         <PublishDialog
           root={root}
           defaultName={basename(root)}
-          onPublished={() => {
+          onPublished={(url) => {
             setPublishing(false);
             refresh();
+            // Offer the new repo as a clickable toast (bottom-left, 5s).
+            if (url) {
+              showToast(`Published · ${url.replace(/^https?:\/\//, "")}`, {
+                url,
+                duration: 5000,
+              });
+            } else {
+              showToast("Published to GitHub", { duration: 5000 });
+            }
           }}
           onCancel={() => setPublishing(false)}
         />
@@ -436,7 +445,8 @@ function PublishDialog({
 }: {
   root: string;
   defaultName: string;
-  onPublished: () => void;
+  /** Receives the new repo's web URL (empty string if it couldn't be resolved). */
+  onPublished: (url: string) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(defaultName);
@@ -468,8 +478,12 @@ function PublishDialog({
     setBusy(true);
     setError(null);
     try {
-      await invoke("git_publish", { path: root, name: repo, private: isPrivate });
-      onPublished();
+      const url = await invoke<string>("git_publish", {
+        path: root,
+        name: repo,
+        private: isPrivate,
+      });
+      onPublished(url);
     } catch (e) {
       setError(String(e));
       setBusy(false);
