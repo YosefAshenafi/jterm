@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Documentation · jterm</title>
+    <meta
+      name="description"
+      content="jterm documentation: install, tabs and panes, the workspace, source control, keyboard shortcuts, configuration, building from source, and architecture."
+    />
+    <meta name="theme-color" content="#0b0d11" />
+    <link rel="icon" type="image/png" href="assets/icon.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="docs.css" />
+  </head>
+  <body class="docs">
+    <a class="skip-link" href="#doc-main">Skip to content</a>
+
+    <!-- ===================== Nav ===================== -->
+    <header class="nav" id="top">
+      <div class="container nav-inner">
+        <a class="brand" href="index.html" aria-label="jterm home">
+          <img src="assets/icon.png" alt="" class="brand-mark" width="28" height="28" />
+          <span class="brand-name">jterm</span>
+          <span class="brand-docs">docs</span>
+        </a>
+
+        <nav class="nav-links" aria-label="Primary">
+          <a href="index.html#features">Features</a>
+          <a href="docs.html" aria-current="page">Docs</a>
+          <a href="index.html#download">Download</a>
+          <a href="https://github.com/YosefAshenafi/jterm" rel="noopener">Source</a>
+        </nav>
+
+        <div class="nav-actions">
+          <a class="btn btn-primary btn-sm" href="index.html#download">Download</a>
+        </div>
+
+        <button class="docs-nav-toggle" aria-label="Open documentation menu" aria-expanded="false" aria-controls="doc-sidebar">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </header>
+
+    <div class="docs-layout container">
+      <!-- ===================== Sidebar ===================== -->
+      <aside class="doc-sidebar" id="doc-sidebar" aria-label="Documentation">
+        <nav class="doc-nav">
+          <p class="doc-nav-group">Getting started</p>
+          <a href="#overview">Overview</a>
+          <a href="#install">Install</a>
+          <a href="#first-run">First run</a>
+
+          <p class="doc-nav-group">Using jterm</p>
+          <a href="#tabs-panes">Tabs &amp; panes</a>
+          <a href="#bottom-panel">Bottom panel</a>
+          <a href="#explorer">File explorer</a>
+          <a href="#search">Search</a>
+          <a href="#editor">Editor</a>
+          <a href="#markdown">Markdown preview</a>
+          <a href="#git">Source control</a>
+          <a href="#palette">Command palette</a>
+
+          <p class="doc-nav-group">Reference</p>
+          <a href="#shortcuts">Keyboard shortcuts</a>
+          <a href="#settings">Settings</a>
+
+          <p class="doc-nav-group">Develop</p>
+          <a href="#build">Build from source</a>
+          <a href="#architecture">Architecture</a>
+
+          <p class="doc-nav-group">Help</p>
+          <a href="#troubleshooting">Troubleshooting</a>
+        </nav>
+      </aside>
+
+      <!-- ===================== Content ===================== -->
+      <main class="doc-content" id="doc-main">
+        <header class="doc-header">
+          <p class="kicker">Documentation</p>
+          <h1>jterm docs</h1>
+          <p class="doc-lead">
+            Everything you need to install, drive, configure, and hack on jterm. macOS shortcuts are
+            shown throughout; on Windows and Linux, substitute <kbd>Ctrl</kbd>+<kbd>Shift</kbd> for
+            <kbd>⌘</kbd>.
+          </p>
+        </header>
+
+        <!-- Getting started -->
+        <section id="overview" class="doc-section">
+          <h2>Overview</h2>
+          <p>
+            jterm is a fast, native terminal for macOS and Windows. It is a real terminal first: a
+            true PTY per pane, GPU text rendering, and full mouse reporting, so
+            <code>vim</code>, <code>htop</code>, <code>tmux</code>, and <code>lazygit</code> behave
+            exactly as they should. On top of that sits a VS Code-style workspace, a file tree,
+            editor, search, and Git, which stays out of the way until you open a folder.
+          </p>
+          <p>
+            It is built as one codebase: a Rust backend (<a href="https://tauri.app" rel="noopener">Tauri</a>)
+            that owns the PTYs, filesystem, and Git, and a React/TypeScript frontend driving
+            <a href="https://xtermjs.org" rel="noopener">xterm.js</a>. The whole app is a few thousand
+            lines, MIT licensed, and meant to be forked.
+          </p>
+        </section>
+
+        <section id="install" class="doc-section">
+          <h2>Install</h2>
+          <p>Download the installer for your OS from the
+            <a href="https://github.com/YosefAshenafi/jterm/releases" rel="noopener">Releases page</a>:</p>
+          <ul>
+            <li><b>macOS</b> (Universal, Intel and Apple Silicon): the <code>.dmg</code>. Drag jterm into Applications.</li>
+            <li><b>Windows</b> (x64): the <code>.exe</code> installer, or the <code>.msi</code>.</li>
+          </ul>
+          <div class="callout callout-warn">
+            <strong>First launch.</strong> Builds are not code-signed yet, so the OS warns you once.
+            On macOS, right-click the app and choose <b>Open</b>. On Windows, choose
+            <b>More info</b>, then <b>Run anyway</b>. Signing and notarization are on the roadmap.
+          </div>
+          <p>Prefer to build it yourself? See <a href="#build">Build from source</a>.</p>
+        </section>
+
+        <section id="first-run" class="doc-section">
+          <h2>First run</h2>
+          <p>On launch you get a single terminal tab with your login shell. From there:</p>
+          <ol>
+            <li>Run a command (<code>ls</code>, <code>htop</code>, <code>vim</code>) and use the mouse inside full-screen programs.</li>
+            <li>Press <kbd>⌘</kbd><kbd>T</kbd> for a new tab, or <kbd>⌘</kbd><kbd>D</kbd> to split the current pane.</li>
+            <li>Open the file explorer with <kbd>⌘</kbd><kbd>B</kbd> to scope the workspace to a folder.</li>
+          </ol>
+          <p>
+            The workspace (explorer, search, editor, Git) is optional. It stays hidden until you open
+            it, so jterm starts as a plain, fast terminal.
+          </p>
+        </section>
+
+        <!-- Using jterm -->
+        <section id="tabs-panes" class="doc-section">
+          <h2>Tabs &amp; panes</h2>
+          <p>
+            Each tab holds a recursive tree of panes, and every pane is its own live shell. Splitting
+            or switching tabs <strong>never kills a running shell</strong>: terminals live outside
+            React, keyed by pane id, so layout changes only move their DOM around.
+          </p>
+          <ul>
+            <li><b>Tabs</b>: <code>+</code> to add, <code>×</code> to close, click to switch, double-click to rename, <kbd>⌘</kbd><kbd>1</kbd> to <kbd>9</kbd> to jump.</li>
+            <li><b>Split</b>: <kbd>⌘</kbd><kbd>D</kbd> left/right, <kbd>⌘</kbd><kbd>⇧</kbd><kbd>D</kbd> top/bottom. Nest as deep as you like; drag the dividers to resize.</li>
+            <li><b>Move a pane</b>: drag it onto another pane's edge, onto a tab, or out into a new tab.</li>
+            <li><b>Maximize</b>: <kbd>⌘</kbd><kbd>M</kbd> zooms the active pane to fill the workspace, and again to restore.</li>
+            <li><b>Cycle focus</b>: <kbd>⌘</kbd><kbd>]</kbd> and <kbd>⌘</kbd><kbd>[</kbd>.</li>
+          </ul>
+        </section>
+
+        <section id="bottom-panel" class="doc-section">
+          <h2>Bottom panel</h2>
+          <p>
+            A VS Code-style drawer of extra terminals, with its own tabs, independent of the main
+            grid. Toggle it with <kbd>⌘</kbd><kbd>J</kbd>; add a terminal to it with
+            <kbd>⌘</kbd><kbd>⇧</kbd><kbd>J</kbd>. It is handy for a long-running process (a dev server,
+            a training run) while you work in the panes above.
+          </p>
+        </section>
+
+        <section id="explorer" class="doc-section">
+          <h2>File explorer</h2>
+          <p>
+            Toggle the explorer with <kbd>⌘</kbd><kbd>B</kbd>. It is a lazy-loaded tree scoped to the
+            active pane's working directory.
+          </p>
+          <ul>
+            <li>Double-click a folder to <code>cd</code> the active terminal into it.</li>
+            <li>Click a file to open it in the editor.</li>
+            <li>Files with Git changes are highlighted by status, so what is modified, added, or untracked reads at a glance.</li>
+          </ul>
+        </section>
+
+        <section id="search" class="doc-section">
+          <h2>Search</h2>
+          <p>
+            Open full-text search across the folder with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>F</kbd>. It runs
+            off the UI thread across every core and cancels itself the moment you keep typing, so the
+            window never freezes.
+          </p>
+          <p>
+            It skips build and vendor directories (<code>node_modules</code>, <code>.git</code>,
+            <code>target</code>, <code>dist</code>), hidden directories, binaries, and files over
+            2&nbsp;MB. Results group by file and link straight to the matching line in the editor.
+          </p>
+        </section>
+
+        <section id="editor" class="doc-section">
+          <h2>Editor</h2>
+          <p>A column between the tree and the terminal for quick edits without leaving the window.</p>
+          <ul>
+            <li>Tabbed buffers, with each terminal tab keeping its own set of open files.</li>
+            <li>Syntax highlighting and file-type-aware auto-indent.</li>
+            <li>A line-number gutter, undo and redo, and save with <kbd>⌘</kbd><kbd>S</kbd>.</li>
+            <li>A guard before discarding unsaved changes.</li>
+          </ul>
+          <div class="callout">
+            <strong>Safe by default.</strong> The editor refuses binary files and files larger than
+            8&nbsp;MB rather than reading a partial buffer, so a save can never truncate your file.
+          </div>
+        </section>
+
+        <section id="markdown" class="doc-section">
+          <h2>Markdown preview</h2>
+          <p>
+            Open a <code>.md</code> file and a <b>Preview</b> toggle appears in the editor status bar.
+            It renders headings, lists, code, blockquotes, and links. Links open in your browser; the
+            source stays one click away via the same toggle.
+          </p>
+        </section>
+
+        <section id="git" class="doc-section">
+          <h2>Source control</h2>
+          <p>
+            Open the Git panel with <kbd>⌘</kbd><kbd>⇧</kbd><kbd>G</kbd>. It shells out to the
+            <code>git</code> on your <code>PATH</code>, so it inherits your config, credentials, and
+            hooks.
+          </p>
+          <ul>
+            <li>Branch, ahead/behind counts, and staged vs. unstaged changes.</li>
+            <li>Stage, unstage, and discard individual files or everything at once.</li>
+            <li>Write a commit message and commit with <kbd>⌘</kbd><kbd>↵</kbd>, then push.</li>
+            <li>A non-repo offers <b>Initialize Repository</b>.</li>
+          </ul>
+          <h3>Publish to GitHub</h3>
+          <p>
+            For a repo with no remote, <b>Publish to GitHub</b> creates a new public or private
+            repository and pushes the current branch in one step. It uses the
+            <a href="https://cli.github.com" rel="noopener">GitHub CLI</a> (<code>gh</code>), so make
+            sure <code>gh</code> is installed and signed in (<code>gh auth login</code>). If a remote
+            already exists, the same action just pushes with upstream tracking.
+          </p>
+        </section>
+
+        <section id="palette" class="doc-section">
+          <h2>Command palette</h2>
+          <ul>
+            <li><b>Quick Open</b> (<kbd>⌘</kbd><kbd>P</kbd>): fuzzy-find any file in the project and open it.</li>
+            <li><b>Go to Line</b> (<kbd>⌘</kbd><kbd>G</kbd>): jump to a line in the active file.</li>
+            <li><b>Find in file</b> (<kbd>⌘</kbd><kbd>F</kbd>): step through matches in the open file.</li>
+          </ul>
+        </section>
+
+        <!-- Reference -->
+        <section id="shortcuts" class="doc-section">
+          <h2>Keyboard shortcuts</h2>
+          <p>
+            Everything is also reachable with the mouse. macOS bindings are shown; on
+            <b>Windows/Linux</b> substitute <kbd>Ctrl</kbd>+<kbd>Shift</kbd> for <kbd>⌘</kbd>.
+          </p>
+
+          <h3>Tabs &amp; panes</h3>
+          <table class="doc-table">
+            <tbody>
+              <tr><td>New tab</td><td><kbd>⌘</kbd><kbd>T</kbd></td></tr>
+              <tr><td>Jump to tab 1 to 9</td><td><kbd>⌘</kbd><kbd>1</kbd> … <kbd>⌘</kbd><kbd>9</kbd></td></tr>
+              <tr><td>Close focused pane / file tab</td><td><kbd>⌘</kbd><kbd>W</kbd></td></tr>
+              <tr><td>Split left / right</td><td><kbd>⌘</kbd><kbd>D</kbd></td></tr>
+              <tr><td>Split top / bottom</td><td><kbd>⌘</kbd><kbd>⇧</kbd><kbd>D</kbd></td></tr>
+              <tr><td>Cycle pane focus</td><td><kbd>⌘</kbd><kbd>]</kbd> / <kbd>⌘</kbd><kbd>[</kbd></td></tr>
+              <tr><td>Maximize / restore pane</td><td><kbd>⌘</kbd><kbd>M</kbd></td></tr>
+            </tbody>
+          </table>
+
+          <h3>Workspace &amp; panels</h3>
+          <table class="doc-table">
+            <tbody>
+              <tr><td>Toggle file explorer</td><td><kbd>⌘</kbd><kbd>B</kbd></td></tr>
+              <tr><td>Search across folder</td><td><kbd>⌘</kbd><kbd>⇧</kbd><kbd>F</kbd></td></tr>
+              <tr><td>Source Control (Git)</td><td><kbd>⌘</kbd><kbd>⇧</kbd><kbd>G</kbd></td></tr>
+              <tr><td>Toggle bottom panel</td><td><kbd>⌘</kbd><kbd>J</kbd></td></tr>
+              <tr><td>New terminal in bottom panel</td><td><kbd>⌘</kbd><kbd>⇧</kbd><kbd>J</kbd></td></tr>
+              <tr><td>Quick Open files</td><td><kbd>⌘</kbd><kbd>P</kbd></td></tr>
+            </tbody>
+          </table>
+
+          <h3>Editor</h3>
+          <table class="doc-table">
+            <tbody>
+              <tr><td>Save the active file</td><td><kbd>⌘</kbd><kbd>S</kbd></td></tr>
+              <tr><td>Find in file</td><td><kbd>⌘</kbd><kbd>F</kbd></td></tr>
+              <tr><td>Go to line</td><td><kbd>⌘</kbd><kbd>G</kbd></td></tr>
+              <tr><td>Zoom in / out / reset</td><td><kbd>⌘</kbd><kbd>+</kbd> / <kbd>⌘</kbd><kbd>-</kbd> / <kbd>⌘</kbd><kbd>0</kbd></td></tr>
+            </tbody>
+          </table>
+
+          <h3>Clipboard</h3>
+          <table class="doc-table">
+            <tbody>
+              <tr><td>Copy selection</td><td><kbd>⌘</kbd><kbd>C</kbd></td></tr>
+              <tr><td>Paste</td><td><kbd>⌘</kbd><kbd>V</kbd></td></tr>
+            </tbody>
+          </table>
+          <div class="callout">
+            The single-key shortcuts (<kbd>⌘B</kbd>, <kbd>⌘P</kbd>, <kbd>⌘G</kbd>, <kbd>⌘F</kbd>,
+            <kbd>⌘J</kbd>, zoom) are macOS-only for now. The chorded ones work on Windows and Linux
+            via <kbd>Ctrl</kbd>+<kbd>Shift</kbd>.
+          </div>
+        </section>
+
+        <section id="settings" class="doc-section">
+          <h2>Settings</h2>
+          <p>
+            Open Settings from the gear in the top-right. Changes apply live and persist to
+            <code>localStorage</code>.
+          </p>
+          <ul>
+            <li><b>Accent color</b>, which also tints the terminal cursor so it tracks the UI.</li>
+            <li><b>Font family</b> and <b>font size</b> (terminal and editor).</li>
+            <li><b>Line height</b>, <b>cursor style</b> (block, bar, underline), and <b>cursor blink</b>.</li>
+            <li><b>Scrollback</b>: lines kept per terminal.</li>
+          </ul>
+          <div class="callout">
+            <strong>No config file yet.</strong> Configuration is in-app for now; a user config file
+            (font, theme, default shell) is on the roadmap. The built-in theme defaults live in
+            <code>src/terminal/theme.ts</code> if you build from source.
+          </div>
+        </section>
+
+        <!-- Develop -->
+        <section id="build" class="doc-section">
+          <h2>Build from source</h2>
+          <p>You will need:</p>
+          <ul>
+            <li><a href="https://nodejs.org" rel="noopener">Node.js</a> 20+ and <a href="https://pnpm.io" rel="noopener">pnpm</a></li>
+            <li><a href="https://rustup.rs" rel="noopener">Rust</a> (stable)</li>
+            <li>A platform toolchain: Xcode Command Line Tools on macOS, or MSVC Build Tools + WebView2 on Windows</li>
+          </ul>
+          <p>Then build the native installer:</p>
+          <div class="code-wrap">
+            <pre class="code-block"><code>git clone https://github.com/YosefAshenafi/jterm
+cd jterm
+pnpm install
+pnpm tauri build</code></pre>
+            <button class="copy-btn" data-copy="git clone https://github.com/YosefAshenafi/jterm&#10;cd jterm&#10;pnpm install&#10;pnpm tauri build" aria-label="Copy commands">
+              <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" width="15" height="15"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+          <p>For development with hot reload, and to run the tests:</p>
+          <div class="code-wrap">
+            <pre class="code-block"><code>pnpm tauri dev                                    <span class="dim"># app window + Vite, hot reload</span>
+pnpm test:run                                     <span class="dim"># frontend unit tests (Vitest)</span>
+cargo test --manifest-path src-tauri/Cargo.toml   <span class="dim"># Rust unit tests</span></code></pre>
+          </div>
+          <p>
+            Tauri does not cross-compile, so build each OS on that OS. See
+            <a href="https://github.com/YosefAshenafi/jterm/blob/main/CONTRIBUTING.md" rel="noopener">CONTRIBUTING.md</a>
+            for the project layout and the invariants to respect.
+          </p>
+        </section>
+
+        <section id="architecture" class="doc-section">
+          <h2>Architecture</h2>
+          <p>
+            The one decision worth internalizing: <strong>terminals live outside React</strong>, in a
+            plain manager keyed by pane id. React components only attach and detach the terminal's DOM
+            element. That is why splitting a pane or switching tabs never disturbs a running shell or
+            its scrollback.
+          </p>
+          <p>
+            The Rust backend exposes a fixed set of commands over Tauri's IPC (PTY, file I/O, search,
+            Git) and nothing else. There is no network listener; both halves run on your machine in
+            one process tree.
+          </p>
+          <p>
+            For the full data flow, the command surface, and the invariants to keep when extending it,
+            read
+            <a href="https://github.com/YosefAshenafi/jterm/blob/main/docs/ARCHITECTURE.md" rel="noopener">docs/ARCHITECTURE.md</a>.
+          </p>
+        </section>
+
+        <!-- Help -->
+        <section id="troubleshooting" class="doc-section">
+          <h2>Troubleshooting</h2>
+          <h3>macOS says the app is damaged or from an unidentified developer</h3>
+          <p>
+            The build is not notarized yet. Right-click the app in Applications and choose
+            <b>Open</b>, then confirm. You only need to do this once.
+          </p>
+          <h3>Windows SmartScreen blocks the installer</h3>
+          <p>Choose <b>More info</b>, then <b>Run anyway</b>. The installer is not signed yet.</p>
+          <h3>Publish to GitHub does nothing or errors</h3>
+          <p>
+            It needs the GitHub CLI installed and authenticated. Run <code>gh auth login</code> in any
+            terminal, then try again.
+          </p>
+          <h3>My layout did not survive a restart</h3>
+          <p>
+            Tab and split layout are not persisted across restarts yet. Session restore is on the
+            roadmap.
+          </p>
+          <p class="doc-help-foot">
+            Still stuck? Open an issue on
+            <a href="https://github.com/YosefAshenafi/jterm/issues" rel="noopener">GitHub</a>.
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <!-- ===================== Footer ===================== -->
+    <footer class="footer">
+      <div class="container footer-base">
+        <span>© <span data-year>2026</span> jterm · MIT Licensed</span>
+        <span class="muted">Built with Tauri · React · xterm.js</span>
+      </div>
+    </footer>
+
+    <script src="main.js"></script>
+    <script src="docs.js"></script>
+  </body>
+</html>
