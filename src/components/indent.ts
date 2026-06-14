@@ -1,7 +1,3 @@
-// Editor auto-indentation, by file type. Pure helpers so the behaviour is unit
-// testable. `language` is a syntax key from languageFromName (e.g. "cstyle",
-// "python", "plain"); see ./syntax.
-
 const BRACKET_PAIRS: Record<string, string> = { "{": "}", "[": "]", "(": ")" };
 
 /** Infer the file's indent unit: a tab if any line is tab-indented, else the
@@ -18,7 +14,7 @@ export function detectIndentUnit(text: string): string {
 
 /** Whether a line (its text up to the cursor) opens a deeper block in `language`. */
 export function opensBlock(language: string, lineBeforeCursor: string): boolean {
-  if (language === "plain") return false; // prose/markdown: just keep indentation
+  if (language === "plain") return false;
   const trimmed = lineBeforeCursor.replace(/\s+$/, "");
   if (/[{([]$/.test(trimmed)) return true;
   if (language === "python" && trimmed.endsWith(":")) return true;

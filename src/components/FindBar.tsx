@@ -23,10 +23,8 @@ export function FindBar({ text, onSelect, onClose }: Props) {
     inputRef.current?.select();
   }, []);
 
-  // Cap matches so a pathological query on a huge file stays responsive.
   const matches = useMemo(() => findAllOccurrences(text, query, 20000), [text, query]);
 
-  // On each new query, jump to the first match.
   useEffect(() => {
     setIdx(0);
     if (matches.length) onSelectRef.current(matches[0], matches[0] + query.length);

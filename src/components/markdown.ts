@@ -1,12 +1,3 @@
-// Minimal, dependency-free Markdown → HTML renderer for the editor's preview
-// pane. Every piece of source text is HTML-
-// escaped before any transform runs, so the output can only ever contain the
-// tags this file emits — rendered markdown can never inject live markup or
-// scripts. Covers the common CommonMark/GFM subset: headings, emphasis, inline
-// and fenced code, lists, blockquotes, rules, links, and paragraphs.
-// (Not supported yet: tables, nested lists, setext headings, inline images —
-// images render as a labelled link since the webview can't load remote files.)
-
 const ESCAPE: Record<string, string> = {
   "&": "&amp;",
   "<": "&lt;",
@@ -26,18 +17,15 @@ function safeHref(url: string): string | null {
 
 /** Apply link/emphasis transforms to already-escaped, code-free text. */
 function formatText(s: string): string {
-  // Images → a labelled link (the webview can't load arbitrary remote images).
   s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, alt, url) => {
     const href = safeHref(url);
     const label = alt || "image";
     return href ? `<a class="md-img" href="${href}">🖼 ${label}</a>` : `🖼 ${label}`;
   });
-  // Links.
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_, text, url) => {
     const href = safeHref(url);
     return href ? `<a href="${href}">${text}</a>` : text;
   });
-  // Emphasis.
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   s = s.replace(/__([^_]+)__/g, "<strong>$1</strong>");
   s = s.replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<em>$2</em>");
@@ -48,8 +36,6 @@ function formatText(s: string): string {
 
 /** Format one line/segment of inline markdown. `src` is raw (unescaped). */
 export function renderInline(src: string): string {
-  // Split into alternating text / `code` segments so code spans aren't touched
-  // by the emphasis/link transforms.
   return src
     .split(/(`[^`]+`)/g)
     .map((part) =>
@@ -77,7 +63,6 @@ export function renderMarkdown(src: string): string {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Fenced code block.
     const fence = /^(```|~~~)/.exec(line);
     if (fence) {
       flushPara();
@@ -85,19 +70,17 @@ export function renderMarkdown(src: string): string {
       const body: string[] = [];
       i++;
       while (i < lines.length && !lines[i].startsWith(marker)) body.push(lines[i++]);
-      i++; // skip the closing fence
+      i++;
       out.push(`<pre class="md-code"><code>${escapeHtml(body.join("\n"))}</code></pre>`);
       continue;
     }
 
-    // Blank line ends a paragraph.
     if (/^\s*$/.test(line)) {
       flushPara();
       i++;
       continue;
     }
 
-    // ATX heading.
     const h = /^(#{1,6})\s+(.*)$/.exec(line);
     if (h) {
       flushPara();
@@ -107,7 +90,6 @@ export function renderMarkdown(src: string): string {
       continue;
     }
 
-    // Horizontal rule.
     if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
       flushPara();
       out.push("<hr />");
@@ -115,7 +97,6 @@ export function renderMarkdown(src: string): string {
       continue;
     }
 
-    // Blockquote (consecutive `>` lines, rendered recursively).
     if (/^\s*>/.test(line)) {
       flushPara();
       const quote: string[] = [];
@@ -126,7 +107,6 @@ export function renderMarkdown(src: string): string {
       continue;
     }
 
-    // List (unordered or ordered) — a run of consecutive item lines.
     if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
       flushPara();
       const ordered = /^\s*\d+[.)]\s+/.test(line);
@@ -139,7 +119,6 @@ export function renderMarkdown(src: string): string {
       continue;
     }
 
-    // Plain paragraph text.
     para.push(line.trim());
     i++;
   }

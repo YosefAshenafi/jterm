@@ -1,4 +1,3 @@
-// Small inline SVG icons (16px, inherit color via currentColor).
 import { SVGProps } from "react";
 
 const base = (props: SVGProps<SVGSVGElement>) => ({
@@ -103,8 +102,6 @@ export const CheckIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-// Counterclockwise circular arrow — "discard / revert changes", like VS Code
-// (not an ✕). Mirror of the sync/refresh glyph.
 export const DiscardIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M3 8a5 5 0 1 0 1.5-3.6" />
@@ -112,7 +109,6 @@ export const DiscardIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-// Map-pin teardrop — "pin the sidebar open".
 export const PinIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M8 2a3.5 3.5 0 0 1 3.5 3.5c0 2.6-3.5 6.5-3.5 6.5S4.5 8.1 4.5 5.5A3.5 3.5 0 0 1 8 2Z" />
@@ -128,7 +124,6 @@ export const ArrowUpIcon = (p: SVGProps<SVGSVGElement>) => (
 );
 
 export const MaximizeIcon = (p: SVGProps<SVGSVGElement>) => (
-  // Corner brackets pointing outward — "zoom this pane to fill".
   <svg {...base(p)}>
     <path d="M6 2.5H2.5V6" />
     <path d="M10 2.5h3.5V6" />
@@ -138,7 +133,6 @@ export const MaximizeIcon = (p: SVGProps<SVGSVGElement>) => (
 );
 
 export const RestoreIcon = (p: SVGProps<SVGSVGElement>) => (
-  // Corner brackets pointing inward — "restore the split layout".
   <svg {...base(p)}>
     <path d="M2.5 6H6V2.5" />
     <path d="M13.5 6H10V2.5" />
@@ -148,7 +142,6 @@ export const RestoreIcon = (p: SVGProps<SVGSVGElement>) => (
 );
 
 export const GearIcon = (p: SVGProps<SVGSVGElement>) => (
-  // Drawn in a 24×24 grid (Feather "settings"), rendered at 16px like the rest.
   <svg {...base({ viewBox: "0 0 24 24", strokeWidth: 1.7, ...p })}>
     <circle cx="12" cy="12" r="3.1" />
     <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />

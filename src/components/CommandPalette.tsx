@@ -24,8 +24,8 @@ function fuzzyMatch(
   for (let ti = 0; ti < t.length && qi < q.length; ti++) {
     if (t[ti] === q[qi]) {
       let s = 1;
-      if (ti === prev + 1) s += 5; // consecutive characters
-      if (ti === 0 || /[/_\-. ]/.test(t[ti - 1])) s += 8; // start of a path segment / word
+      if (ti === prev + 1) s += 5;
+      if (ti === 0 || /[/_\-. ]/.test(t[ti - 1])) s += 8;
       score += s;
       positions.push(ti);
       prev = ti;
@@ -34,8 +34,8 @@ function fuzzyMatch(
   }
   if (qi < q.length) return null;
   const slash = t.lastIndexOf("/");
-  score += positions.filter((p) => p > slash).length * 2; // favor basename hits
-  score -= t.length * 0.01; // gently prefer shorter paths
+  score += positions.filter((p) => p > slash).length * 2;
+  score -= t.length * 0.01;
   return { score, positions };
 }
 
@@ -73,9 +73,6 @@ function FilePalette() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      // Use the terminal's *current* directory (not the possibly-stale stored
-      // project root); list_files resolves it to the git/project root so the
-      // whole project is searched.
       const root = (await resolveCwd(store.activePaneId)) || store.projectRoot;
       if (!root) {
         if (alive) setFiles([]);
@@ -91,8 +88,6 @@ function FilePalette() {
     return () => {
       alive = false;
     };
-    // Resolve once when the palette opens.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const results = useMemo(() => {
