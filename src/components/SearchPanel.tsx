@@ -31,13 +31,11 @@ export function SearchPanel() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the field whenever the view is (re)opened.
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [searchNonce]);
 
-  // Debounced search on query / folder change.
   useEffect(() => {
     const q = query.trim();
     if (!q || !projectRoot) {
@@ -93,8 +91,6 @@ export function SearchPanel() {
             title={allCollapsed ? "Expand all" : "Collapse all"}
             aria-label={allCollapsed ? "Expand all" : "Collapse all"}
             disabled={results.length === 0}
-            // Act on click so Enter/Space work too; swallowing pointerdown
-            // keeps mouse clicks from stealing focus away from the terminal.
             onPointerDown={(e) => e.preventDefault()}
             onClick={toggleAll}
           >

@@ -11,15 +11,10 @@ import { GitPanel } from "./GitPanel";
 export function Sidebar() {
   const { sidebarView, sidebarOpen, sidebarPeek, setSidebarPeek, sidebarWidth, setSidebarWidth } =
     useStore();
-  // Local state for a smooth live drag; seeded from (and saved back to) the
-  // remembered width so toggling the sidebar restores its last size.
   const [width, setWidth] = useState(sidebarWidth);
   const cleanupRef = useRef<(() => void) | null>(null);
-  // Overlay (floating) mode when revealed by hover rather than pinned open.
   const overlay = !sidebarOpen && sidebarPeek;
 
-  // Tear down a live resize drag if the sidebar unmounts mid-drag so its
-  // window listeners don't leak.
   useEffect(() => () => cleanupRef.current?.(), []);
 
   const startResize = (e: React.PointerEvent) => {
@@ -35,7 +30,7 @@ export function Sidebar() {
       },
       () => {
         cleanupRef.current = null;
-        setSidebarWidth(last); // remember the final size
+        setSidebarWidth(last);
       }
     );
   };

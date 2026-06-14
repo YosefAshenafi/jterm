@@ -15,7 +15,6 @@ describe("load/save settings", () => {
   });
 
   it("merges partial stored settings over the defaults", () => {
-    // A newer build may add fields older stored blobs don't have.
     localStorage.setItem("jterm.settings", JSON.stringify({ fontSize: 18 }));
     expect(loadSettings()).toEqual({ ...DEFAULT_SETTINGS, fontSize: 18 });
   });

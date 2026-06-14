@@ -14,7 +14,6 @@ describe("renderInline", () => {
   });
 
   it("does not mistake plain spaced numbers for code", () => {
-    // Regression: a naive space-delimited sentinel would corrupt this.
     expect(renderInline("`x` then 0 and 1 and 2")).toBe("<code>x</code> then 0 and 1 and 2");
   });
 

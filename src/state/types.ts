@@ -1,8 +1,3 @@
-// Layout model: every tab holds a recursive binary tree of panes.
-// A leaf is a single terminal; a split places two children side by side
-// (`row` => left/right, vertical divider) or stacked (`column` => top/bottom,
-// horizontal divider). Nesting is unlimited in both directions.
-
 export type Direction = "row" | "column";
 
 export interface LeafNode {

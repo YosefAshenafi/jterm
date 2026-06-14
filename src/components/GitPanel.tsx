@@ -40,8 +40,6 @@ function StatusBadge({ code }: { code: string }) {
 
 const preserveFocus = (e: ReactPointerEvent) => e.preventDefault();
 
-// ── File Row ────────────────────────────────────────────────
-
 function FileRow({
   file,
   code,
@@ -95,8 +93,6 @@ function FileRow({
   );
 }
 
-// ── Panel ───────────────────────────────────────────────────
-
 /** Source Control: branch, staged/unstaged changes, commit message + push. */
 export function GitPanel() {
   const { activePaneId, openDiffView, setGitChangesCount, showToast } = useStore();
@@ -106,9 +102,7 @@ export function GitPanel() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  // Pending rollback awaiting the user's confirmation.
   const [confirm, setConfirm] = useState<{ title: string; message: string; run: () => void } | null>(null);
-  // Showing the "Publish to GitHub" chooser (repo has no remote yet).
   const [publishing, setPublishing] = useState(false);
   const seqRef = useRef(0);
 
@@ -168,8 +162,6 @@ export function GitPanel() {
       run: () => run(() => invoke("git_discard_all", { path: root })),
     });
   const push = () => run(() => invoke("git_push", { path: root }));
-  // Publish: with no remote yet, open the public/private chooser (VS Code-style);
-  // once a remote exists, the same button just pushes.
   const onPublish = () => (status?.upstream ? push() : setPublishing(true));
   const init = () => run(() => invoke("git_init", { path: dir }));
   const commit = () =>
@@ -185,7 +177,6 @@ export function GitPanel() {
       if (diff.trim()) {
         openDiffView(fullPath, diff);
       } else if (!staged) {
-        // Untracked file — show content as all additions
         const content = await invoke<string>("read_file", { path: fullPath });
         const asDiff = content.split("\n").map((l) => `+${l}`).join("\n");
         openDiffView(fullPath, asDiff);
@@ -193,7 +184,6 @@ export function GitPanel() {
         openDiffView(fullPath, diff);
       }
     } catch {
-      // Fallback: open normally
     }
   };
 
@@ -408,7 +398,6 @@ export function GitPanel() {
           onPublished={(url) => {
             setPublishing(false);
             refresh();
-            // Offer the new repo as a clickable toast (bottom-left, 5s).
             if (url) {
               showToast(`Published · ${url.replace(/^https?:\/\//, "")}`, {
                 url,
@@ -432,8 +421,6 @@ function GitBranchLabel({ branch }: { branch: string }) {
     </span>
   );
 }
-
-// ── Publish to GitHub ───────────────────────────────────────
 
 /** Chooser shown when publishing a repo that has no remote yet: pick a name and
  * public/private, then create the GitHub repo and push (via the GitHub CLI). */
@@ -460,7 +447,6 @@ function PublishDialog({
     inputRef.current?.select();
   }, []);
 
-  // Esc cancels (but not mid-publish, so we don't abandon an in-flight create).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !busy) {

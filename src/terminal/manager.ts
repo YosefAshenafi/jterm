@@ -1,8 +1,3 @@
-// Owns one xterm.js Terminal + PTY per pane id. Terminals live OUTSIDE React so
-// that re-renders (splitting, tab switches, layout changes) never destroy a
-// running shell or its scrollback. React components only attach/detach the
-// terminal's DOM element and ask the manager to fit/focus/dispose.
-
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -77,8 +72,6 @@ class TerminalManager {
       accent: string;
     }>
   ): void {
-    // Font metrics (family / size / line height) change the cell grid, so a
-    // re-fit is needed for any of them.
     const fontChanged =
       (prefs.fontFamily != null && prefs.fontFamily !== this.prefs.fontFamily) ||
       (prefs.fontSize != null && prefs.fontSize !== this.prefs.fontSize) ||
@@ -122,10 +115,6 @@ class TerminalManager {
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
-    // window.open goes nowhere inside a Tauri webview — route detected links
-    // through the opener plugin (whose capability is scoped to http/https).
-    // Plain click opens in the browser; Option/Alt-click downloads the target.
-    // We also track the hovered link so a right-click menu can act on it.
     term.loadAddon(
       new WebLinksAddon(
         (event, uri) => {
@@ -145,10 +134,8 @@ class TerminalManager {
     );
     term.open(element);
     try {
-      // GPU renderer; falls back to the DOM renderer if WebGL is unavailable.
       term.loadAddon(new WebglAddon());
     } catch {
-      /* no WebGL — xterm keeps its default renderer */
     }
 
     const pane: PaneTerminal = { term, fit, element, ptyId: null, spawning: false };
@@ -159,15 +146,12 @@ class TerminalManager {
     });
     term.onTitleChange((title) => this.onTitle?.(paneId, title));
 
-    // Shift+Enter types a newline into the command instead of running it.
-    // ESC+CR is the sequence zsh inserts a literal newline for and that TUIs
-    // like Claude Code treat as "insert newline" (its /terminal-setup binding).
     term.attachCustomKeyEventHandler((ev) => {
       if (ev.key === "Enter" && ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
         if (ev.type === "keydown" && pane.ptyId != null) {
           this.queueWrite(paneId, pane.ptyId, "\x1b\r");
         }
-        return false; // suppress xterm's plain "\r" in every event phase
+        return false;
       }
       return true;
     });
@@ -212,14 +196,11 @@ class TerminalManager {
     if (pane.ptyId != null || pane.spawning) return;
     pane.spawning = true;
 
-    // A split pre-assigns this pane's directory (the source pane's cwd); the
-    // lookup may still be in flight, so wait for it before starting the shell.
     const pending = this.spawnCwd.get(paneId);
     if (cwd == null && pending) {
       try {
         cwd = await pending;
       } catch {
-        /* lookup failed — spawn in the default directory */
       }
     }
 
@@ -229,7 +210,6 @@ class TerminalManager {
 
     const channel = new Channel<PtyEvent>();
     channel.onmessage = (msg) => {
-      // The pane may have been disposed while the event was in flight.
       if (this.panes.get(paneId) !== pane) return;
       if (msg.type === "data") pane.term.write(base64ToBytes(msg.data));
       else if (msg.type === "exit") this.onExit?.(paneId);
@@ -244,15 +224,11 @@ class TerminalManager {
         onEvent: channel,
       });
       if (this.panes.get(paneId) !== pane) {
-        // Pane closed while the spawn was in flight — reap the orphan shell,
-        // or it would run invisibly until the app exits.
         invoke("pty_kill", { id });
         return;
       }
       pane.ptyId = id;
     } catch (e) {
-      // Show the failure in the pane itself; a silently blank terminal with an
-      // unhandled rejection gives the user nothing to act on.
       if (this.panes.get(paneId) === pane) {
         pane.term.writeln(`\x1b[31mFailed to start shell: ${e}\x1b[0m`);
       }
@@ -309,36 +285,23 @@ class TerminalManager {
     const ptyId = pane.ptyId;
     const stillLive = () => this.panes.get(paneId) === pane && pane.ptyId != null;
 
-    // Deliver a file path: a TUI with bracketed-paste mode on (Claude Code,
-    // Codex, …) receives it as a single bracketed paste and recognizes an image
-    // file, rendering an inline `[Image #N]` placeholder — exactly like iTerm. A
-    // plain shell prompt has nothing to render a placeholder, so it gets a
-    // shell-quoted path it can pass to a command.
     const pasteFilePath = (p: string) => {
       if (pane.term.modes.bracketedPasteMode) pane.term.paste(p);
       else invoke("pty_write", { id: ptyId, data: `${shellQuote(p)} ` });
     };
 
-    // 1) A file copied in Finder (very often an image/screenshot) lands on the
-    //    clipboard as a file *reference* plus its name as plain text. Prefer the
-    //    real file path over that bare filename, or the image is lost as text.
     const files = await invoke<string[]>("clipboard_file_paths").catch(() => [] as string[]);
     if (files.length > 0) {
       if (stillLive()) pasteFilePath(files[0]);
       return;
     }
 
-    // 2) Plain text. Routed through xterm so bracketed-paste mode is honored
-    //    (the app gets `ESC[200~ … ESC[201~`), which stops multi-line pastes from
-    //    auto-running and lets TUIs treat the chunk as one paste.
     const text = await clipboardRead().catch(() => null);
     if (text) {
       pane.term.paste(text);
       return;
     }
 
-    // 3) Raw image bytes (e.g. a region screenshot copied straight to the
-    //    clipboard, with no backing file): materialize a temp PNG and paste it.
     const path = await invoke<string | null>("save_clipboard_image").catch(() => null);
     if (path && stillLive()) pasteFilePath(path);
   }

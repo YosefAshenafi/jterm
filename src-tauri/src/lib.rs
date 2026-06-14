@@ -35,7 +35,6 @@ async fn read_dir(path: String) -> Result<Vec<DirEntryInfo>, String> {
         for entry in std::fs::read_dir(&path).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
             let p = entry.path();
-            // Follow symlinks so linked directories show as folders.
             let is_dir = std::fs::metadata(&p).map(|m| m.is_dir()).unwrap_or(false);
             out.push(DirEntryInfo {
                 name: entry.file_name().to_string_lossy().into_owned(),
@@ -121,8 +120,6 @@ async fn download_url(app: tauri::AppHandle, url: String) -> Result<String, Stri
     let dir = downloads.to_string_lossy().into_owned();
     blocking(move || {
         std::fs::create_dir_all(&dir).ok();
-        // -f fail on HTTP errors, -L follow redirects, -O remote name, -J honor
-        // Content-Disposition; -w prints the path actually written.
         let output = std::process::Command::new("curl")
             .args([
                 "-fLOJ",
@@ -188,7 +185,7 @@ async fn save_clipboard_image(app: tauri::AppHandle) -> Result<Option<String>, S
     use tauri_plugin_clipboard_manager::ClipboardExt;
     let image = match app.clipboard().read_image() {
         Ok(img) => img,
-        Err(_) => return Ok(None), // no image on the clipboard
+        Err(_) => return Ok(None),
     };
     let (width, height) = (image.width(), image.height());
     let rgba = image.rgba().to_vec();
@@ -234,8 +231,6 @@ fn read_clipboard_file_paths() -> Vec<String> {
 
     let mut out = Vec::new();
     let pb = NSPasteboard::generalPasteboard();
-    // "public.file-url" is the modern UTI for a single file reference; it
-    // decodes (e.g. %20 -> space) once routed through NSURL.path.
     let ty = NSString::from_str("public.file-url");
     if let Some(s) = pb.stringForType(&ty) {
         if let Some(url) = NSURL::URLWithString(&s) {
@@ -281,8 +276,17 @@ fn resolve_project_root(path: &str) -> String {
         }
     }
     const MARKERS: &[&str] = &[
-        ".git", "package.json", "Cargo.toml", "go.mod", "pyproject.toml",
-        "pom.xml", "build.gradle", "composer.json", ".hg", ".svn", "Makefile",
+        ".git",
+        "package.json",
+        "Cargo.toml",
+        "go.mod",
+        "pyproject.toml",
+        "pom.xml",
+        "build.gradle",
+        "composer.json",
+        ".hg",
+        ".svn",
+        "Makefile",
     ];
     let home = std::env::var("HOME").ok();
     let mut dir = std::path::Path::new(path);
@@ -291,7 +295,7 @@ fn resolve_project_root(path: &str) -> String {
             return dir.to_string_lossy().into_owned();
         }
         if home.as_deref() == dir.to_str() {
-            break; // don't escape past the home directory
+            break;
         }
         match dir.parent() {
             Some(parent) if parent != dir => dir = parent,
@@ -348,8 +352,6 @@ async fn list_files(root: String) -> Result<Vec<FileEntry>, String> {
     })
     .await
 }
-
-// ---- Full-text search -------------------------------------------------------
 
 /// Directories never descended into when listing/searching the project. Only
 /// dependency and cache/build-cache dirs are skipped — NOT `dist`/`build` output
@@ -446,9 +448,8 @@ fn search_file(
         Err(_) => return Vec::new(),
     };
     if bytes[..bytes.len().min(8192)].contains(&0) {
-        return Vec::new(); // binary
+        return Vec::new();
     }
-    // Borrow as &str when valid UTF-8 (no copy); lossy only on bad bytes.
     let text = String::from_utf8_lossy(&bytes);
     let mut matches = Vec::new();
     for (lineno, line) in text.lines().enumerate() {
@@ -485,11 +486,8 @@ fn search_blocking(path: &str, needle: &str, generation: &AtomicU64, my_gen: u64
         truncated: false,
     };
     let superseded = || generation.load(Ordering::Relaxed) != my_gen;
-    // Search the whole repo, not just the terminal's current subdirectory.
     let root = std::path::PathBuf::from(resolve_project_root(path));
 
-    // 1) Enumerate candidate files. Directory walking is cheap; the costly part
-    //    (reading + scanning contents) is parallelized below.
     let mut files: Vec<std::path::PathBuf> = Vec::new();
     let mut stack = vec![root.clone()];
     let mut checked = 0usize;
@@ -525,8 +523,6 @@ fn search_blocking(path: &str, needle: &str, generation: &AtomicU64, my_gen: u64
         return empty();
     }
 
-    // 2) Scan file contents in parallel. Workers pull from a shared cursor and
-    //    stop early once cancelled or the result cap is reached.
     let ascii = needle.is_ascii();
     let needle_bytes = needle.as_bytes();
     let next = AtomicUsize::new(0);
@@ -604,8 +600,6 @@ async fn search_in_folder(
     .await
     .map_err(|e| e.to_string())
 }
-
-// ---- Git --------------------------------------------------------------------
 
 /// Map a finished process's output to stdout on success, or stderr (falling back
 /// to stdout when stderr is empty) on failure.
@@ -742,8 +736,6 @@ fn parse_porcelain_status(raw: &str) -> (String, Option<String>, u32, u32, Vec<G
             let x = &rec[0..1];
             let y = &rec[1..2];
             let p = &rec[3..];
-            // A rename/copy in either column is followed by an extra
-            // NUL-terminated record holding the origin path.
             let is_rename = x == "R" || x == "C" || y == "R" || y == "C";
             files.push(GitFile {
                 path: p.to_string(),
@@ -751,7 +743,7 @@ fn parse_porcelain_status(raw: &str) -> (String, Option<String>, u32, u32, Vec<G
                 y: y.to_string(),
             });
             if is_rename {
-                i += 1; // skip the rename source path that follows
+                i += 1;
             }
         }
         i += 1;
@@ -826,8 +818,6 @@ async fn git_unstage_all(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn git_discard_all(path: String) -> Result<(), String> {
     blocking(move || {
-        // Revert tracked changes in the working tree, then remove untracked
-        // files/dirs (respecting .gitignore) — VS Code's "Discard All Changes".
         let _ = run_git(&path, &["checkout", "--", "."]);
         run_git(&path, &["clean", "-fd"]).map(|_| ())
     })
@@ -850,9 +840,6 @@ async fn git_push(path: String) -> Result<String, String> {
 #[tauri::command]
 async fn git_discard(path: String, file: String) -> Result<(), String> {
     blocking(move || {
-        // Fully revert the file regardless of its staged state, so it leaves the
-        // changes list entirely (matching VS Code's Discard): unstage it first,
-        // then restore it from HEAD; a brand-new file (no HEAD version) is deleted.
         let _ = run_git(&path, &["reset", "-q", "HEAD", "--", &file]);
         match run_git(&path, &["checkout", "--", &file]) {
             Ok(_) => Ok(()),
@@ -894,13 +881,9 @@ async fn git_publish(path: String, name: String, private: bool) -> Result<String
         if name.is_empty() {
             return Err("Repository name is empty".into());
         }
-        // gh pushes the current branch, so there must be a commit to push.
         if run_git(&path, &["rev-parse", "--verify", "HEAD"]).is_err() {
             return Err("Nothing to publish yet — make your first commit, then publish.".into());
         }
-        // If a remote is already configured, the branch just needs pushing with
-        // upstream tracking — creating a new GitHub repo would fail on the
-        // existing remote, so push instead.
         let remotes = run_git(&path, &["remote"]).unwrap_or_default();
         if let Some(remote) = remotes.split_whitespace().next() {
             let branch = run_git(&path, &["symbolic-ref", "--short", "HEAD"]).unwrap_or_default();
@@ -911,20 +894,19 @@ async fn git_publish(path: String, name: String, private: bool) -> Result<String
             run_git(&path, &["push", "-u", remote, branch])?;
         } else {
             let visibility = if private { "--private" } else { "--public" };
-            // Creates the GitHub repo, wires up `origin`, and pushes the branch.
             run_gh(
                 &path,
                 &[
-                    "repo", "create", name, visibility,
-                    "--source", &path, "--remote", "origin", "--push",
+                    "repo", "create", name, visibility, "--source", &path, "--remote", "origin",
+                    "--push",
                 ],
             )?;
         }
-        // Best-effort: hand back the repo's web URL so the UI can link to it.
-        // An empty string just means "published, link unknown".
-        Ok(run_gh(&path, &["repo", "view", "--json", "url", "--jq", ".url"])
-            .map(|s| s.trim().to_string())
-            .unwrap_or_default())
+        Ok(
+            run_gh(&path, &["repo", "view", "--json", "url", "--jq", ".url"])
+                .map(|s| s.trim().to_string())
+                .unwrap_or_default(),
+        )
     })
     .await
 }
@@ -981,15 +963,9 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(PtyManager::default())
         .manage(SearchState::default())
-        // Remove most of the default macOS menu to prevent system accelerators
-        // (Cmd+M minimize, Cmd+D bookmark, Cmd+H hide, etc.) from swallowing
-        // keystrokes before the webview can handle them. Keep the app submenu
-        // with Quit so Cmd+Q still closes the application.
         .menu(|handle| {
             let quit = PredefinedMenuItem::quit(handle, Some("Quit jterm"))?;
-            let app_menu = SubmenuBuilder::new(handle, "jterm")
-                .item(&quit)
-                .build()?;
+            let app_menu = SubmenuBuilder::new(handle, "jterm").item(&quit).build()?;
             let menu = Menu::with_items(handle, &[&app_menu])?;
             Ok(menu)
         })
@@ -1029,8 +1005,6 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    // -- ascii_ci_contains ----------------------------------------------------
-
     #[test]
     fn ci_contains_matches_case_insensitively() {
         assert!(ascii_ci_contains(b"Hello World", b"world"));
@@ -1048,12 +1022,9 @@ mod tests {
 
     #[test]
     fn ci_contains_survives_repeated_prefixes() {
-        // First bytes match repeatedly before the real hit.
         assert!(ascii_ci_contains(b"aaab", b"aab"));
         assert!(!ascii_ci_contains(b"aaa", b"aab"));
     }
-
-    // -- extract_count ----------------------------------------------------------
 
     #[test]
     fn extract_count_reads_ahead_and_behind() {
@@ -1062,8 +1033,6 @@ mod tests {
         assert_eq!(extract_count("[behind 7]", "ahead"), 0);
         assert_eq!(extract_count("", "ahead"), 0);
     }
-
-    // -- parse_porcelain_status ---------------------------------------------------
 
     #[test]
     fn parses_branch_with_upstream_and_counts() {
@@ -1083,7 +1052,6 @@ mod tests {
             ("M", " ", "a.rs")
         );
         assert_eq!((files[1].x.as_str(), files[1].y.as_str()), (" ", "M"));
-        // Paths with spaces survive the -z record split.
         assert_eq!(files[2].path, "new file.txt");
     }
 
@@ -1108,9 +1076,6 @@ mod tests {
 
     #[test]
     fn worktree_rename_also_skips_origin_path_record() {
-        // ` R` (rename in the work tree, e.g. after `git add -N`) also carries an
-        // origin-path record; treating it as a plain entry would inject a phantom
-        // file whose "status" is the first bytes of the origin path.
         let raw = "## main\0 R renamed.rs\0origin.rs\0M  real.rs\0";
         let (.., files) = parse_porcelain_status(raw);
         assert_eq!(files.len(), 2);

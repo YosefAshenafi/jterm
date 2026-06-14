@@ -37,8 +37,6 @@ export function Toolbar() {
     split,
   } = useStore();
 
-  // The "first terminal": the top-left-most pane of the first tab. Its folder
-  // defines the workspace shown in the sidebar, VS Code style.
   const firstPaneId = firstLeaf(state.tabs[0].root).id;
 
   const [editing, setEditing] = useState(false);
@@ -46,8 +44,6 @@ export function Toolbar() {
   const [invalid, setInvalid] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Folder/sidebar state captured when editing starts, so Escape can undo the
-  // live edits. `skipBlur` stops Escape's unmount from re-applying on blur.
   const originalRef = useRef<{ root: string | null; open: boolean }>({ root: null, open: false });
   const skipBlur = useRef(false);
 
@@ -55,8 +51,6 @@ export function Toolbar() {
     if (editing) inputRef.current?.select();
   }, [editing]);
 
-  // Live update: as the path is typed, apply it the moment it names a readable
-  // folder (debounced). Partial/invalid paths simply leave the sidebar as-is.
   useEffect(() => {
     if (!editing) return;
     const raw = draft.trim();
@@ -67,7 +61,7 @@ export function Toolbar() {
       try {
         await invoke("read_dir", { path });
       } catch {
-        return; // not a folder (yet) — don't touch the sidebar or flash an error
+        return;
       }
       if (!alive) return;
       setProjectRoot(path);
@@ -82,11 +76,9 @@ export function Toolbar() {
 
   const openSidebar = async () => {
     if (sidebarOpen && sidebarView === "explorer") {
-      toggleSidebar(); // explorer already showing — close it
+      toggleSidebar();
       return;
     }
-    // Opening (or switching from another view): reveal the first terminal's
-    // current folder in the file tree.
     setProjectRoot(await resolveCwd(firstPaneId));
     setSidebarView("explorer");
     setSidebarOpen(true);
@@ -99,7 +91,6 @@ export function Toolbar() {
     setEditing(true);
   };
 
-  // Escape: undo any live changes and restore the folder we started from.
   const cancel = () => {
     skipBlur.current = true;
     setProjectRoot(originalRef.current.root);
@@ -107,7 +98,6 @@ export function Toolbar() {
     setEditing(false);
   };
 
-  // Apply the typed path to the sidebar if it points at a readable folder.
   const tryApply = async (): Promise<"ok" | "invalid" | "empty"> => {
     const raw = draft.trim();
     if (!raw) return "empty";
@@ -125,7 +115,7 @@ export function Toolbar() {
   const commit = async () => {
     const result = await tryApply();
     if (result === "invalid") {
-      setInvalid(true); // keep editing so the typo can be fixed
+      setInvalid(true);
       inputRef.current?.select();
     } else {
       setEditing(false);
@@ -134,16 +124,14 @@ export function Toolbar() {
 
   const blurClose = async () => {
     if (skipBlur.current) {
-      skipBlur.current = false; // Escape already handled this
+      skipBlur.current = false;
       setEditing(false);
       return;
     }
-    await tryApply(); // flush a valid path typed just before blur; discard if invalid
+    await tryApply();
     setEditing(false);
   };
 
-  // Toolbar buttons act on click so Enter/Space work, but swallow pointerdown
-  // so a mouse press never steals focus from the terminal.
   const keepFocus = (e: React.PointerEvent) => e.preventDefault();
 
   return (

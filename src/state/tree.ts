@@ -1,6 +1,3 @@
-// Pure operations over the pane tree. Every function returns a new tree so the
-// reducer stays immutable and React re-renders predictably.
-
 import { Direction, LeafNode, PaneNode, SplitNode } from "./types";
 
 let counter = 0;
@@ -81,7 +78,7 @@ export function removePane(root: PaneNode, targetId: string): PaneNode | null {
     const a = rec(node.children[0]);
     const b = rec(node.children[1]);
     if (a && b) return { ...node, children: [a, b] };
-    return a ?? b; // collapse the split into its surviving child
+    return a ?? b;
   };
   return rec(root);
 }

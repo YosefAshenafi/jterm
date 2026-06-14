@@ -54,10 +54,9 @@ describe("autoIndentOnEnter", () => {
   });
 
   it("splits a matching bracket pair onto its own lines", () => {
-    // "  {}" with the caret between the braces.
     const r = autoIndentOnEnter("cstyle", "  {}", 3, 3);
     expect(r.value).toBe("  {\n    \n  }");
-    expect(r.caret).toBe(8); // end of the indented middle line
+    expect(r.caret).toBe(8);
   });
 
   it("just keeps indentation in plain text (no bracket magic)", () => {
@@ -66,7 +65,6 @@ describe("autoIndentOnEnter", () => {
   });
 
   it("replaces a selection while indenting from the start line", () => {
-    // Select "bar" in "  bar" and press Enter → newline keeps the 2-space indent.
     const r = autoIndentOnEnter("cstyle", "  bar", 2, 5);
     expect(r.value).toBe("  \n  ");
   });

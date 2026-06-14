@@ -12,14 +12,9 @@ export function trackPointerDrag(
   onMove: (ev: PointerEvent) => void,
   onEnd?: () => void
 ): () => void {
-  // Capture so move/up keep arriving even when the pointer leaves the window.
-  // Capture can fail if the pointer is already gone (e.g. lifted between the
-  // event firing and us handling it) — then the buttons check below ends the
-  // drag on the first move instead.
   try {
     e.currentTarget.setPointerCapture(e.pointerId);
   } catch {
-    /* ignore */
   }
 
   let done = false;
@@ -32,8 +27,6 @@ export function trackPointerDrag(
     onEnd?.();
   };
   const handleMove = (ev: PointerEvent) => {
-    // No buttons held means the press ended without us seeing pointerup —
-    // stop tracking rather than keep resizing on unpressed movement.
     if (ev.buttons === 0) {
       teardown();
       return;
