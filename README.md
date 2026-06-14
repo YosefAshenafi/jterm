@@ -13,6 +13,8 @@ panel when you need them.
 [![Latest release](https://img.shields.io/github/v/release/yosefashenafi/jterm?sort=semver)](https://github.com/yosefashenafi/jterm/releases)
 ![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)
 
+**[Website](https://yosefashenafi.github.io/jterm/)** · **[Download](https://github.com/yosefashenafi/jterm/releases)**
+
 </div>
 
 > One codebase: a Rust backend ([Tauri](https://tauri.app)) and a React/TypeScript
