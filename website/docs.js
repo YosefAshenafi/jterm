@@ -65,4 +65,120 @@
   };
   window.addEventListener("hashchange", fromHash);
   fromHash();
+
+  /* ---- Search (client-side, over section content) ---- */
+  const input = document.getElementById("doc-search-input");
+  const results = document.getElementById("doc-search-results");
+  if (input && results) {
+    const index = sections.map((s) => {
+      const h = s.querySelector("h2");
+      return {
+        id: s.id,
+        title: h ? h.textContent.trim() : s.id,
+        text: (s.textContent || "").replace(/\s+/g, " ").trim(),
+      };
+    });
+
+    const ESC = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+    const esc = (str) => str.replace(/[&<>"]/g, (c) => ESC[c]);
+
+    function snippet(text, q) {
+      const i = text.toLowerCase().indexOf(q);
+      if (i === -1) return esc(text.slice(0, 110));
+      const start = Math.max(0, i - 32);
+      const slice = (start > 0 ? "… " : "") + text.slice(start, start + 120);
+      const at = slice.toLowerCase().indexOf(q);
+      if (at === -1) return esc(slice);
+      return (
+        esc(slice.slice(0, at)) +
+        "<mark>" + esc(slice.slice(at, at + q.length)) + "</mark>" +
+        esc(slice.slice(at + q.length))
+      );
+    }
+
+    let items = [];
+    let active = -1;
+
+    function close() {
+      results.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+      items = [];
+      active = -1;
+    }
+    function go(id) {
+      close();
+      input.value = "";
+      location.hash = "#" + id;
+    }
+    function highlight(idx) {
+      if (!items.length) return;
+      active = (idx + items.length) % items.length;
+      items.forEach((el, i) => el.classList.toggle("active", i === active));
+      items[active].scrollIntoView({ block: "nearest" });
+    }
+    function render(q) {
+      const ql = q.toLowerCase();
+      const matches = index
+        .filter((e) => e.title.toLowerCase().includes(ql) || e.text.toLowerCase().includes(ql))
+        .slice(0, 8);
+      if (!matches.length) {
+        results.innerHTML =
+          '<div class="doc-search-empty">No results for “' + esc(q) + "”</div>";
+      } else {
+        results.innerHTML = matches
+          .map(
+            (e) =>
+              '<button class="doc-result" type="button" role="option" data-id="' + e.id + '">' +
+              '<span class="doc-result-title">' + esc(e.title) + "</span>" +
+              '<span class="doc-result-snippet">' + snippet(e.text, ql) + "</span></button>"
+          )
+          .join("");
+      }
+      results.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+      items = Array.from(results.querySelectorAll(".doc-result"));
+      active = -1;
+      items.forEach((el) => el.addEventListener("click", () => go(el.dataset.id)));
+    }
+
+    input.addEventListener("input", () => {
+      const q = input.value.trim();
+      if (!q) close();
+      else render(q);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        highlight(active + 1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        highlight(active - 1);
+      } else if (e.key === "Enter") {
+        const target = active >= 0 ? items[active] : items[0];
+        if (target) {
+          e.preventDefault();
+          go(target.dataset.id);
+        }
+      } else if (e.key === "Escape") {
+        if (results.hidden) input.blur();
+        else close();
+      }
+    });
+    document.addEventListener("click", (e) => {
+      if (!results.hidden && !e.target.closest(".doc-search")) close();
+    });
+    document.addEventListener("keydown", (e) => {
+      const el = document.activeElement;
+      const typing = el && /^(INPUT|TEXTAREA)$/.test(el.tagName);
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        sidebar && sidebar.classList.add("open");
+        input.focus();
+      } else if (e.key === "/" && !typing) {
+        e.preventDefault();
+        sidebar && sidebar.classList.add("open");
+        input.focus();
+      }
+    });
+  }
 })();

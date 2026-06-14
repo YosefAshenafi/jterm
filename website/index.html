@@ -43,23 +43,13 @@
           <a href="#features">Features</a>
           <a href="docs.html">Docs</a>
           <a href="#download">Download</a>
-          <a href="https://github.com/YosefAshenafi/jterm" rel="noopener">Source</a>
+          <a href="https://github.com/YosefAshenafi/jterm" rel="noopener">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" width="15" height="15"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+            GitHub
+          </a>
         </nav>
 
         <div class="nav-actions">
-          <a
-            class="btn btn-ghost btn-sm gh-star"
-            href="https://github.com/YosefAshenafi/jterm"
-            rel="noopener"
-          >
-            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" width="16" height="16">
-              <path
-                fill="currentColor"
-                d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"
-              />
-            </svg>
-            <span>Star</span>
-          </a>
           <a class="btn btn-primary btn-sm" href="#download">Download</a>
         </div>
 
@@ -71,7 +61,7 @@
         <a href="#features">Features</a>
         <a href="docs.html">Docs</a>
         <a href="#download">Download</a>
-        <a href="https://github.com/YosefAshenafi/jterm" rel="noopener">Source</a>
+        <a href="https://github.com/YosefAshenafi/jterm" rel="noopener">GitHub</a>
       </nav>
     </header>
 
@@ -121,33 +111,72 @@
                 </span>
               </div>
               <div class="term-body">
-                <div class="term-explorer reveal-1">
+                <!-- Explorer + Git status -->
+                <div class="term-explorer" data-rise="1">
                   <div class="term-side-head">Explorer</div>
-                  <div class="tree-row tree-dir">src</div>
-                  <div class="tree-row git-mod"><span class="tree-name">main.rs</span><span class="git-mark">M</span></div>
-                  <div class="tree-row git-add"><span class="tree-name">agent.rs</span><span class="git-mark">A</span></div>
-                  <div class="tree-row">lib.rs</div>
-                  <div class="tree-row tree-dir">model</div>
-                  <div class="tree-row git-mod"><span class="tree-name">train.py</span><span class="git-mark">M</span></div>
-                  <div class="tree-row git-unt"><span class="tree-name">notes.md</span><span class="git-mark">U</span></div>
+                  <div class="tree-row tree-dir">▾ src</div>
+                  <div class="tree-row git-mod indent"><span class="tree-name">main.rs</span><span class="git-mark">M</span></div>
+                  <div class="tree-row git-add indent"><span class="tree-name">agent.rs</span><span class="git-mark">A</span></div>
+                  <div class="tree-row indent"><span class="tree-name">lib.rs</span></div>
+                  <div class="tree-row tree-dir">▾ model</div>
+                  <div class="tree-row git-mod indent"><span class="tree-name">train.py</span><span class="git-mark">M</span></div>
+                  <div class="tree-row git-unt indent"><span class="tree-name">notes.md</span><span class="git-mark">U</span></div>
+                  <div class="tree-row">README.md</div>
                 </div>
-                <div class="term-pane term-pane-main">
-                  <div class="term-line"><span class="p">~/proj</span> <span class="c">$</span> <span class="typed" data-text="cargo run --release"></span><span class="caret"></span></div>
-                  <div class="term-out reveal-1"><span class="ok">  Compiling</span> proj v0.1.0</div>
-                  <div class="term-out reveal-2"><span class="ok">   Finished</span> release in 0.8s</div>
-                  <div class="term-out reveal-3 dim">     Running `target/release/proj`</div>
-                  <div class="term-line reveal-4"><span class="p">~/proj</span> <span class="c">$</span> <span class="blink">▍</span></div>
-                </div>
-                <div class="term-pane term-pane-side reveal-3">
-                  <div class="term-side-tab">train.py</div>
-                  <div class="term-out"><span class="ok">epoch 6</span> loss 0.271</div>
-                  <div class="term-out"><span class="ok">epoch 7</span> loss 0.214</div>
-                  <div class="term-out"><span class="ok">epoch 8</span> loss 0.182</div>
-                  <div class="term-spark">
-                    <i style="height:82%"></i><i style="height:70%"></i><i style="height:64%"></i><i style="height:52%"></i><i style="height:46%"></i><i style="height:38%"></i><i style="height:32%"></i><i style="height:27%"></i>
+
+                <!-- Editor: tabbed buffers, gutter, syntax -->
+                <div class="term-editor" data-rise="2">
+                  <div class="term-edit-tabs">
+                    <span class="term-edit-tab active">main.rs</span>
+                    <span class="term-edit-tab">train.py</span>
+                    <span class="term-edit-tab">README.md</span>
                   </div>
-                  <div class="term-out dim reveal-4">streaming logs…</div>
+                  <div class="term-code">
+                    <ol class="code-lines">
+                      <li><span class="t-kw">use</span> tauri::Manager;</li>
+                      <li></li>
+                      <li><span class="t-at">#[tauri::command]</span></li>
+                      <li><span class="t-kw">fn</span> <span class="t-fn">spawn_pty</span>(id: <span class="t-ty">u32</span>) {</li>
+                      <li class="is-active">  <span class="t-fn">pty</span>::open(id)<span class="t-op">?</span>;<span class="edit-caret"></span></li>
+                      <li>  emit(<span class="t-str">"ready"</span>);</li>
+                      <li>}</li>
+                    </ol>
+                  </div>
                 </div>
+
+                <!-- Terminal: real PTY, looping commands (filled by main.js) -->
+                <div class="term-pane term-pane-main" data-rise="3">
+                  <div class="term-run"></div>
+                </div>
+              </div>
+
+              <!-- Bottom panel (⌘J): a second shell with live logs -->
+              <div class="term-panel" data-rise="4">
+                <div class="term-panel-tabs">
+                  <span class="term-panel-tab active">Terminal</span>
+                  <span class="term-panel-tab">Problems</span>
+                  <span class="term-panel-tab">Output</span>
+                  <span class="term-panel-hint">⌘J</span>
+                </div>
+                <div class="term-panel-body">
+                  <div class="term-out"><span class="p">model</span> <span class="c">$</span> python train.py</div>
+                  <div class="term-out term-train"><span class="ok">epoch 8</span> loss <span class="train-loss">0.182</span></div>
+                  <div class="term-spark"></div>
+                </div>
+              </div>
+
+              <!-- Status bar: source control + context -->
+              <div class="term-status" data-rise="5">
+                <span class="st-seg st-branch">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2.2"/><circle cx="6" cy="18" r="2.2"/><circle cx="18" cy="8" r="2.2"/><path d="M6 8.2v7.6"/><path d="M18 10.2c0 3.8-5 2.8-9 4.6"/></svg>
+                  main
+                </span>
+                <span class="st-seg">↑1 ↓0</span>
+                <span class="st-seg st-mod">✱ 3</span>
+                <span class="st-spacer"></span>
+                <span class="st-seg opt">UTF-8</span>
+                <span class="st-seg opt">Rust</span>
+                <span class="st-seg st-key">⌘P</span>
               </div>
             </div>
             <div class="term-glow"></div>
@@ -318,7 +347,7 @@ pnpm tauri build</code></pre>
           <header class="section-head">
             <p class="kicker">Download</p>
             <h2>Get jterm <span class="grad">v0.1.0</span></h2>
-            <p class="section-sub">Native installers for macOS and Windows. Free and open source.</p>
+            <p class="section-sub">Native installers for macOS and Windows, and a build-from-source path for Linux. Free and open source.</p>
           </header>
 
           <div class="dl-grid">
@@ -351,6 +380,18 @@ pnpm tauri build</code></pre>
                 or the
                 <a href="https://github.com/YosefAshenafi/jterm/releases/download/v0.1.0/jterm_0.1.0_x64_en-US.msi">.msi installer</a>
               </p>
+            </article>
+
+            <article class="dl-card" id="dl-linux">
+              <div class="dl-head">
+                <svg class="dl-os" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a3.7 3.7 0 0 0-3.7 3.7v2.9c0 1-.5 1.8-1.3 2.9C6 13 4.9 14.5 4.9 16.8c0 .8.4 1.5 1.1 1.9.4 1 1.3 1.7 2.5 2 .5.5 1.2.8 1.9.8h3.2c.7 0 1.4-.3 1.9-.8 1.2-.3 2.1-1 2.5-2 .7-.4 1.1-1.1 1.1-1.9 0-2.3-1.1-3.8-2.1-5.3-.8-1.1-1.3-1.9-1.3-2.9V5.7A3.7 3.7 0 0 0 12 2Zm-1.6 4a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7Zm3.2 0a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7Z"/></svg>
+                <div>
+                  <h3>Linux</h3>
+                  <p class="dl-meta">Ubuntu / Debian · from source</p>
+                </div>
+              </div>
+              <a class="btn btn-primary dl-btn" href="docs.html#build">Build for Linux</a>
+              <p class="dl-note">Produces a <code>.deb</code> and AppImage</p>
             </article>
           </div>
 
