@@ -19,6 +19,18 @@
   const primaryIco = document.getElementById("primary-os-ico");
   const WIN_ICON =
     "M0 2.4 6.5 1.5V7.6H0V2.4Zm0 11.2 6.5.9V8.4H0v5.2ZM7.3 1.4 16 .2v7.4H7.3V1.4Zm0 13.2L16 15.8V8.4H7.3v6.2Z";
+  const LINUX_ICON =
+    "M12 2a3.7 3.7 0 0 0-3.7 3.7v2.9c0 1-.5 1.8-1.3 2.9C6 13 4.9 14.5 4.9 16.8c0 .8.4 1.5 1.1 1.9.4 1 1.3 1.7 2.5 2 .5.5 1.2.8 1.9.8h3.2c.7 0 1.4-.3 1.9-.8 1.2-.3 2.1-1 2.5-2 .7-.4 1.1-1.1 1.1-1.9 0-2.3-1.1-3.8-2.1-5.3-.8-1.1-1.3-1.9-1.3-2.9V5.7A3.7 3.7 0 0 0 12 2Zm-1.6 4a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7Zm3.2 0a.85.85 0 1 1 0 1.7.85.85 0 0 1 0-1.7Z";
+
+  /* ---- OS-aware nav download (icon before "Download") ---- */
+  const navDl = document.getElementById("nav-download");
+  const navIco = document.getElementById("nav-os-ico");
+  function setOsIcon(svg, viewBox, d) {
+    if (!svg) return;
+    svg.setAttribute("viewBox", viewBox);
+    const p = svg.querySelector("path");
+    if (p) p.setAttribute("d", d);
+  }
 
   function detectedBadge(card) {
     if (!card) return;
@@ -35,20 +47,27 @@
   if (isWindows) {
     if (primaryLabel) primaryLabel.textContent = "Download for Windows";
     if (primary) primary.href = WIN_EXE;
-    if (primaryIco) primaryIco.querySelector("path").setAttribute("d", WIN_ICON);
+    setOsIcon(primaryIco, "0 0 16 16", WIN_ICON);
+    if (navDl) navDl.href = WIN_EXE;
+    setOsIcon(navIco, "0 0 16 16", WIN_ICON);
     detectedBadge(document.getElementById("dl-windows"));
   } else if (isMac) {
     if (primary) primary.href = MAC_DMG;
+    if (navDl) navDl.href = MAC_DMG;
     detectedBadge(document.getElementById("dl-macos"));
   } else if (isLinux) {
     if (primaryLabel) primaryLabel.textContent = "Download for Linux";
     if (primary) primary.href = LINUX_DEB;
     if (primaryIco) primaryIco.style.display = "none";
+    if (navDl) navDl.href = LINUX_DEB;
+    setOsIcon(navIco, "0 0 24 24", LINUX_ICON);
     detectedBadge(document.getElementById("dl-linux"));
   } else {
     if (primaryLabel) primaryLabel.textContent = "Download";
     if (primary) primary.href = "#download";
     if (primaryIco) primaryIco.style.display = "none";
+    if (navDl) navDl.href = "#download";
+    if (navIco) navIco.style.display = "none";
   }
 
   /* ---- Homepage nav active state (scrollspy over in-page sections) ---- */

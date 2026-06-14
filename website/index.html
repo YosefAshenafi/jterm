@@ -50,7 +50,12 @@
         </nav>
 
         <div class="nav-actions">
-          <a class="btn btn-primary btn-sm" href="#download">Download</a>
+          <a class="btn btn-primary btn-sm" id="nav-download" href="#download">
+            <svg class="ico os-ico" id="nav-os-ico" viewBox="0 0 16 16" aria-hidden="true" width="15" height="15">
+              <path fill="currentColor" d="M11.18 8.51c-.02-1.7 1.39-2.51 1.45-2.55-.79-1.16-2.02-1.32-2.46-1.34-1.05-.11-2.04.61-2.57.61-.53 0-1.35-.6-2.22-.58-1.14.02-2.19.66-2.78 1.68-1.18 2.06-.3 5.11.85 6.78.56.82 1.23 1.74 2.11 1.71.85-.03 1.17-.55 2.19-.55s1.31.55 2.21.53c.91-.02 1.49-.84 2.05-1.66.64-.95.9-1.87.92-1.92-.02-.01-1.77-.68-1.79-2.7l-.84.46Zm-1.7-4.95c.47-.57.78-1.36.7-2.15-.67.03-1.49.45-1.97 1.01-.43.5-.81 1.3-.71 2.07.75.06 1.51-.38 1.98-.93Z"/>
+            </svg>
+            <span>Download</span>
+          </a>
         </div>
 
         <button class="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
@@ -70,7 +75,6 @@
       <section class="hero">
         <div class="container hero-grid">
           <div class="hero-copy">
-            <p class="eyebrow">Built for senior &amp; AI engineers</p>
             <h1 class="hero-title">
               Stay on top of <span class="grad">every terminal and every file.</span>
             </h1>
@@ -183,15 +187,6 @@
           </div>
         </div>
 
-        <!-- Stat strip -->
-        <div class="container">
-          <ul class="stats">
-            <li><b>&lt; 1s</b><span>cold start</span></li>
-            <li><b>1</b><span>real PTY / pane</span></li>
-            <li><b>GPU</b><span>text rendering</span></li>
-            <li><b>MIT</b><span>open source</span></li>
-          </ul>
-        </div>
       </section>
 
       <!-- ===================== Features ===================== -->
@@ -414,6 +409,14 @@ pnpm tauri build</code></pre>
 
     <!-- ===================== Footer ===================== -->
     <footer class="footer">
+      <div class="container">
+        <ul class="stats">
+          <li><b>&lt; 1s</b><span>cold start</span></li>
+          <li><b>1</b><span>real PTY / pane</span></li>
+          <li><b>GPU</b><span>text rendering</span></li>
+          <li><b>MIT</b><span>open source</span></li>
+        </ul>
+      </div>
       <div class="container footer-grid">
         <div class="footer-brand">
           <a class="brand" href="#top" aria-label="jterm home">
@@ -441,7 +444,11 @@ pnpm tauri build</code></pre>
         </nav>
       </div>
       <div class="container footer-base">
-        <span>© <span data-year>2026</span> jterm · MIT Licensed</span>
+        <span>
+          © <span data-year>2026</span> jterm · MIT Licensed · Developed by
+          <a href="https://yosefashenafi.github.io" rel="noopener">Yosef Ashenafi</a>
+          · <a class="coffee-link" href="support.html" target="_blank" rel="noopener">☕ Buy me a coffee</a>
+        </span>
         <span class="muted">Built with Tauri · React · xterm.js</span>
       </div>
     </footer>
