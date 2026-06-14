@@ -1,6 +1,6 @@
 # jterm website
 
-The landing site for jterm — a single static page (HTML, CSS, vanilla JS) with
+The landing site for jterm: a single static page (HTML, CSS, vanilla JS) with
 no build step and no dependencies.
 
 ## Preview locally
@@ -14,12 +14,12 @@ python3 -m http.server 8080   # → http://localhost:8080
 
 ## Files
 
-- `index.html` — markup and content.
-- `styles.css` — design tokens (color, type, spacing) and layout.
-- `main.js` — OS-aware download button, the hero terminal typing animation,
+- `index.html`: markup and content.
+- `styles.css`: design tokens (color, type, spacing) and layout.
+- `main.js`: OS-aware download button, the hero terminal typing animation,
   scroll reveal, the mobile menu, and copy-to-clipboard. Progressive
   enhancement: the page is fully readable with JavaScript disabled.
-- `assets/` — logo and icon.
+- `assets/`: logo and icon.
 
 ## Deploy
 
