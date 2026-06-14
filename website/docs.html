@@ -137,8 +137,17 @@
           <ul>
             <li><b>macOS</b> (Universal, Intel and Apple Silicon): the <code>.dmg</code>. Drag jterm into Applications.</li>
             <li><b>Windows</b> (x64): the <code>.exe</code> installer, or the <code>.msi</code>.</li>
-            <li><b>Linux</b> (x86_64): the <code>.deb</code> (<code>sudo apt install ./jterm_*.deb</code>), the AppImage (mark executable and run), or the <code>.rpm</code>. See <a href="#build">Linux notes</a> to build it yourself.</li>
+            <li><b>Linux</b> (x86_64): the <code>.deb</code> (Debian/Ubuntu), the AppImage (mark executable and run), or the <code>.rpm</code> (Fedora). See <a href="#build">Linux notes</a> to build it yourself.</li>
           </ul>
+          <p>On Debian/Ubuntu, download and install the <code>.deb</code> from a terminal:</p>
+          <div class="code-wrap">
+            <pre class="code-block"><code>curl -LO https://github.com/YosefAshenafi/jterm/releases/download/v0.2.0/jterm_0.2.0_amd64.deb
+sudo apt install ./jterm_0.2.0_amd64.deb</code></pre>
+            <button class="copy-btn" data-copy="curl -LO https://github.com/YosefAshenafi/jterm/releases/download/v0.2.0/jterm_0.2.0_amd64.deb&#10;sudo apt install ./jterm_0.2.0_amd64.deb" aria-label="Copy Linux install commands">
+              <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" width="15" height="15"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
           <div class="callout callout-warn">
             <strong>First launch.</strong> Builds are not code-signed yet, so the OS warns you once.
             On macOS, right-click the app and choose <b>Open</b>. On Windows, choose
