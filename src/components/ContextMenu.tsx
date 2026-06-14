@@ -18,9 +18,6 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x, top: y });
 
-  // Clamp into the viewport before paint: the app is overflow:hidden, so a
-  // menu opened near the bottom/right edge (e.g. at the shell prompt) would
-  // otherwise put items offscreen with no way to reach them.
   useLayoutEffect(() => {
     const rect = menuRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -53,10 +50,6 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           key={i}
           className="context-item"
           disabled={item.disabled}
-          // Pointer activation must stay on pointerdown: the window-level
-          // close listener runs before any click could be delivered. onClick
-          // covers keyboard only — e.detail is 0 exactly when the click came
-          // from Enter/Space rather than a pointer.
           onPointerDown={(e) => {
             if (e.button !== 0) return;
             if (!item.disabled) {

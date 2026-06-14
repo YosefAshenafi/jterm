@@ -88,8 +88,6 @@ function SplitView({ node, tab, onPaneMenu }: TreeProps & { node: Extract<PaneNo
   const frame = useRef<number | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
-  // A split can be removed mid-drag (e.g. ⌘W closes a pane); tear the drag
-  // down on unmount so its listeners don't outlive the component.
   useEffect(() => () => cleanupRef.current?.(), []);
 
   const startDrag = (e: React.PointerEvent) => {
@@ -114,8 +112,6 @@ function SplitView({ node, tab, onPaneMenu }: TreeProps & { node: Extract<PaneNo
         );
       },
       () => {
-        // Drop any still-queued frame so a resize can't land after the drag
-        // ended (or after this split unmounted).
         if (frame.current != null) {
           cancelAnimationFrame(frame.current);
           frame.current = null;

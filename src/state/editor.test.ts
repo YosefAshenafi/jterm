@@ -36,7 +36,7 @@ describe("open / loaded", () => {
 describe("edit / saved", () => {
   it("editing makes the buffer dirty; a loading buffer is never dirty", () => {
     let s = open(emptyEditor, "/a.ts");
-    expect(isDirty(s.files[0])).toBe(false); // saved === null
+    expect(isDirty(s.files[0])).toBe(false);
     s = editorReducer(s, { type: "loaded", path: "/a.ts", text: "v1" });
     s = editorReducer(s, { type: "edit", path: "/a.ts", draft: "v2" });
     expect(isDirty(s.files[0])).toBe(true);
@@ -46,13 +46,11 @@ describe("edit / saved", () => {
     let s = open(emptyEditor, "/a.ts");
     s = editorReducer(s, { type: "loaded", path: "/a.ts", text: "v1" });
     s = editorReducer(s, { type: "edit", path: "/a.ts", draft: "v2" });
-    // The save of "v2" is in flight while the user types "v3"...
     s = editorReducer(s, { type: "edit", path: "/a.ts", draft: "v3" });
-    // ...then the write of "v2" completes.
     s = editorReducer(s, { type: "saved", path: "/a.ts", text: "v2" });
     expect(s.files[0].saved).toBe("v2");
     expect(s.files[0].draft).toBe("v3");
-    expect(isDirty(s.files[0])).toBe(true); // "v3" never reached disk
+    expect(isDirty(s.files[0])).toBe(true);
   });
 });
 
@@ -92,7 +90,6 @@ describe("per-tab editor map", () => {
     let m: EditorMap = {};
     m = openIn(m, "tab1", "/a.ts");
     expect(m.tab1.files.map((f) => f.path)).toEqual(["/a.ts"]);
-    // The other tab has never been touched — it stays empty.
     expect(m.tab2).toBeUndefined();
   });
 
@@ -100,7 +97,6 @@ describe("per-tab editor map", () => {
     let m: EditorMap = {};
     m = openIn(m, "tab1", "/a.ts");
     m = openIn(m, "tab1", "/b.ts");
-    // tab2 is brand new: reading it falls back to the empty editor.
     const tab2 = m.tab2 ?? emptyEditor;
     expect(tab2.files).toHaveLength(0);
     expect(tab2.activePath).toBeNull();

@@ -4,7 +4,7 @@ import { findAllOccurrences } from "./textSearch";
 describe("findAllOccurrences", () => {
   it("finds non-overlapping, case-insensitive matches", () => {
     expect(findAllOccurrences("Hello World", "o")).toEqual([4, 7]);
-    expect(findAllOccurrences("aaaa", "aa")).toEqual([0, 2]); // non-overlapping
+    expect(findAllOccurrences("aaaa", "aa")).toEqual([0, 2]);
   });
 
   it("returns no matches for an empty needle (would otherwise loop forever)", () => {

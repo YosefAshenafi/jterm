@@ -1,27 +1,16 @@
-// Dependency-free syntax highlighting for the file editor.
-//
-// Performance first: a single regex tokenizes the whole buffer in one linear
-// pass and we emit an HTML *string* (applied with one innerHTML write) instead
-// of thousands of React nodes — so there is no per-token reconciliation on every
-// keystroke. Above a size cap we skip tokenizing entirely and just escape the
-// text, guaranteeing huge files never add typing latency.
-
-const MAX_HIGHLIGHT = 100_000; // chars; above this we render plain (still fast)
+const MAX_HIGHLIGHT = 100_000;
 
 interface LangSpec {
-  line?: string; // line-comment marker, e.g. "//" or "#"
-  block?: [string, string]; // block-comment delimiters, e.g. ["/*", "*/"]
-  rawStrings?: string[]; // extra string regex sources (e.g. python triple quotes)
-  strings: string; // single-char string delimiters, e.g. "\"'`"
-  keywords?: Set<string>; // identifiers to color as keywords
-  caps?: boolean; // color Capitalized identifiers as types
+  line?: string;
+  block?: [string, string];
+  rawStrings?: string[];
+  strings: string;
+  keywords?: Set<string>;
+  caps?: boolean;
 }
 
 const kw = (s: string) => new Set(s.trim().split(/\s+/));
 
-// One broad union across the common code languages. A few cross-language false
-// positives (e.g. `def` would never appear in JS anyway) are an acceptable trade
-// for covering many languages with one fast table in a lightweight viewer.
 const CODE_KEYWORDS = kw(`
   abstract alias and as asserts async await become box break case catch chan class const
   constructor continue crate debugger declare def default defer del delete dis do done dyn
@@ -96,8 +85,6 @@ function htmlEscape(s: string): string {
   return s.replace(/[&<>]/g, (c) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : "&gt;"));
 }
 
-// Compiled regex is cached per language — building it is the only non-trivial
-// setup cost and it never changes for a given language.
 const regexCache = new Map<string, RegExp>();
 
 function tokenizer(key: keyof typeof SPECS): RegExp {
@@ -115,21 +102,19 @@ function tokenizer(key: keyof typeof SPECS): RegExp {
     else strings.push(d + "(?:\\\\.|[^" + d + "\\\\\\n])*" + d + "?");
   }
 
-  const never = "(?!x)x"; // matches nothing, keeps group numbering stable
+  const never = "(?!x)x";
   const source =
-    "(" + URL_SRC + ")" + // 1: url
-    "|(" + (comment.length ? comment.join("|") : never) + ")" + // 2: comment
-    "|(" + (strings.length ? strings.join("|") : never) + ")" + // 3: string
-    "|(0[xX][0-9a-fA-F]+|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" + // 4: number
-    "|([A-Za-z_$][\\w$]*)"; // 5: identifier
+    "(" + URL_SRC + ")" +
+    "|(" + (comment.length ? comment.join("|") : never) + ")" +
+    "|(" + (strings.length ? strings.join("|") : never) + ")" +
+    "|(0[xX][0-9a-fA-F]+|\\b\\d[\\d_]*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)" +
+    "|([A-Za-z_$][\\w$]*)";
 
   const re = new RegExp(source, "g");
   regexCache.set(key, re);
   return re;
 }
 
-// http(s) URLs, stopping before trailing punctuation / closing brackets so they
-// read as links. Used to color links blue in both code and plain text.
 const URL_SRC = "https?:\\/\\/[^\\s\"'`<>)\\]}]+";
 
 function highlightUrlsOnly(code: string): string {
@@ -150,7 +135,6 @@ function highlightUrlsOnly(code: string): string {
 export function highlightToHtml(code: string, key: keyof typeof SPECS): string {
   const spec = SPECS[key];
   if (code.length > MAX_HIGHLIGHT) return htmlEscape(code) + "\n";
-  // Plain text still gets links colored (so URLs in .md/.txt are clickable-blue).
   if (key === "plain") return highlightUrlsOnly(code);
 
   const re = tokenizer(key);
@@ -173,8 +157,8 @@ export function highlightToHtml(code: string, key: keyof typeof SPECS): string {
       else out += ident;
     }
     last = m.index + full.length;
-    if (full.length === 0) re.lastIndex++; // guard against a zero-width match
+    if (full.length === 0) re.lastIndex++;
   }
   out += htmlEscape(code.slice(last));
-  return out + "\n"; // trailing line so the pre's height tracks the textarea
+  return out + "\n";
 }

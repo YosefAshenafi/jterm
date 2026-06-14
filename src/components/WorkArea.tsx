@@ -20,8 +20,6 @@ import { PaneTree, MenuRequest } from "./PaneTree";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { FindBar } from "./FindBar";
 
-// Monospace char width, cached per resolved font (for mapping a mouse point to
-// a text offset in the editor).
 let charWidthCache: { font: string; w: number } | null = null;
 function measureCharWidth(font: string): number {
   if (charWidthCache?.font === font) return charWidthCache.w;
@@ -56,7 +54,7 @@ function urlAt(text: string, pos: number): string | null {
   while (start > 0 && !boundary(text[start - 1])) start--;
   let end = pos;
   while (end < text.length && !boundary(text[end])) end++;
-  const token = text.slice(start, end).replace(/[.,;:]+$/, ""); // drop trailing punctuation
+  const token = text.slice(start, end).replace(/[.,;:]+$/, "");
   return /^https?:\/\/\S+$/i.test(token) ? token : null;
 }
 
@@ -72,8 +70,6 @@ export function WorkArea() {
   const { state, editor } = store;
   const [menu, setMenu] = useState<MenuRequest | null>(null);
   const [panelHeight, setPanelHeight] = useState(260);
-  // Tooltip shown while hovering a link in the editor (telling the user the
-  // ⌘/Ctrl-click shortcut). Position is captured when a link is first hovered.
   const [linkHint, setLinkHint] = useState<{ x: number; y: number } | null>(null);
   const hintUrlRef = useRef<string | null>(null);
   const requested = useRef<Set<string>>(new Set());
@@ -82,7 +78,6 @@ export function WorkArea() {
   const preRef = useRef<HTMLPreElement>(null);
   const panelResize = useRef<(() => void) | null>(null);
 
-  // Drop a live panel-resize drag if the area unmounts mid-drag.
   useEffect(() => () => panelResize.current?.(), []);
 
   const startPanelResize = (e: React.PointerEvent) => {
@@ -93,7 +88,6 @@ export function WorkArea() {
     panelResize.current = trackPointerDrag(
       e,
       (ev) => {
-        // The panel sits at the bottom, so dragging up makes it taller.
         const next = startH + (startY - ev.clientY);
         setPanelHeight(Math.min(max, Math.max(120, next)));
       },
@@ -103,8 +97,6 @@ export function WorkArea() {
     );
   };
 
-  // Editor zoom: font size (from settings, ⌘+/⌘-/⌘scroll) and a matching line
-  // height that the gutter and scroll math both use.
   const editorFont = store.settings.editorFontSize;
   const editorLine = Math.round(editorFont * 1.45);
 
@@ -114,7 +106,6 @@ export function WorkArea() {
   const active = editor.files.find((f) => f.path === editor.activePath) ?? null;
   const editing = active && !active.loading && active.saved !== null && !active.image;
 
-  // Markdown files get a rendered Preview toggle in the editor status bar.
   const isMarkdownFile = (name: string) => /\.(md|markdown|mdown|mkd|mkdn)$/i.test(name);
   const [previewPaths, setPreviewPaths] = useState<Set<string>>(() => new Set());
   const togglePreview = (path: string) =>
@@ -127,15 +118,12 @@ export function WorkArea() {
   const showMdPreview =
     !!active && isMarkdownFile(active.name) && previewPaths.has(active.path);
 
-  // Read each newly opened file exactly once; forget closed files so a re-open
-  // pulls a fresh copy from disk.
   useEffect(() => {
     editor.files.forEach((f) => {
       if (f.loading && !requested.current.has(f.path)) {
         requested.current.add(f.path);
         const mime = imageMime(f.path);
         if (mime) {
-          // Images load as base64 and render as a preview, like VS Code.
           invoke<string>("read_file_base64", { path: f.path })
             .then((b64) => store.markFileImage(f.path, `data:${mime};base64,${b64}`))
             .catch((err) => store.markFileError(f.path, String(err)));
@@ -150,18 +138,15 @@ export function WorkArea() {
     requested.current.forEach((p) => {
       if (!live.has(p)) requested.current.delete(p);
     });
-    // Forget undo history for files that were closed (a re-open starts fresh).
     history.current.forEach((_, p) => {
       if (!live.has(p)) history.current.delete(p);
     });
   }, [editor.files, store]);
 
-  // Move focus into the text area when the active file changes by user intent.
   useEffect(() => {
     if (editing && store.focusRegion === "editor") taRef.current?.focus();
   }, [editor.activePath, editing, store.focusRegion]);
 
-  // Releasing ⌘/Ctrl clears the link pointer even without moving the mouse.
   useEffect(() => {
     const onKeyUp = (e: KeyboardEvent) => {
       if ((e.key === "Meta" || e.key === "Control") && taRef.current) {
@@ -172,8 +157,6 @@ export function WorkArea() {
     return () => window.removeEventListener("keyup", onKeyUp);
   }, []);
 
-  // Reveal a line requested from search: once the target file is loaded and
-  // active, select that line and scroll it into view, then clear the request.
   const reveal = store.reveal;
   useEffect(() => {
     if (!reveal || !active || !editing) return;
@@ -187,7 +170,7 @@ export function WorkArea() {
     const end = start + lines[line - 1].length;
     ta.focus();
     ta.setSelectionRange(start, end);
-    const lh = editorLine; // matches the editor's line height
+    const lh = editorLine;
     ta.scrollTop = Math.max(0, (line - 1) * lh - ta.clientHeight / 2 + lh);
     syncScroll();
     store.clearReveal();
@@ -199,16 +182,12 @@ export function WorkArea() {
     return Array.from({ length: count }, (_, i) => i + 1);
   }, [editing, active?.draft]);
 
-  // Syntax-highlighted mirror of the buffer, painted behind a transparent
-  // textarea. Memoized so it only recomputes when the text or language changes.
   const language = useMemo(() => languageFromName(active?.name ?? ""), [active?.name]);
   const highlighted = useMemo(
     () => (editing && active && !active.diff ? highlightToHtml(active.draft, language) : ""),
     [editing, active?.draft, active?.diff, language]
   );
 
-  // Keep the gutter and the highlight layer aligned with the text area as it
-  // scrolls (the highlight <pre> sits behind the transparent textarea).
   const syncScroll = () => {
     const ta = taRef.current;
     if (!ta) return;
@@ -219,10 +198,6 @@ export function WorkArea() {
     }
   };
 
-  // Per-file undo/redo history. The textarea is controlled, so native undo is
-  // unreliable; we keep our own snapshot stack and coalesce rapid keystrokes
-  // into one step. (The app strips the macOS Edit menu, so these editing
-  // shortcuts are handled here rather than by the system.)
   const history = useRef<Map<string, { stack: string[]; index: number; t: number }>>(
     new Map()
   );
@@ -233,10 +208,10 @@ export function WorkArea() {
       h = { stack: [prev], index: 0, t: 0 };
       history.current.set(path, h);
     }
-    if (h.index < h.stack.length - 1) h.stack.length = h.index + 1; // drop redo branch
+    if (h.index < h.stack.length - 1) h.stack.length = h.index + 1;
     const now = Date.now();
     if (now - h.t < 450 && h.index > 0) {
-      h.stack[h.index] = next; // coalesce a burst of typing into the current step
+      h.stack[h.index] = next;
     } else {
       h.stack.push(next);
       h.index = h.stack.length - 1;
@@ -255,7 +230,7 @@ export function WorkArea() {
     const idx = h.index + delta;
     if (idx < 0 || idx >= h.stack.length) return;
     h.index = idx;
-    h.t = 0; // a fresh edit after undo/redo starts a new step
+    h.t = 0;
     const value = h.stack[idx];
     store.setFileDraft(active.path, value);
     const ta = taRef.current;
@@ -268,16 +243,12 @@ export function WorkArea() {
     store.setFileDraft(active.path, e.target.value);
   };
 
-  // Standard editing shortcuts inside the file editor: select-all, copy, cut,
-  // paste, undo, redo. ⌘W/⌘S are handled by the app-level handler.
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (!active) return;
     const ta = e.currentTarget;
     const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 
     if (e.key === "Tab" && !mod) {
-      // Indent by one unit (the file's own, tab or N spaces) instead of leaving
-      // the editor.
       e.preventDefault();
       const { selectionStart, selectionEnd, value } = ta;
       const unit = detectIndentUnit(value);
@@ -291,7 +262,6 @@ export function WorkArea() {
     }
 
     if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      // Auto-indent the new line based on the file type (see ./indent).
       e.preventDefault();
       const { selectionStart, selectionEnd, value } = ta;
       const { value: next, caret } = autoIndentOnEnter(
@@ -359,7 +329,6 @@ export function WorkArea() {
     const tab = tabOf(req.paneId);
     const hasSelection = !!terminals.getSelection(req.paneId);
     const items: MenuItem[] = [];
-    // When right-clicking a link, offer link actions first.
     if (req.link) {
       const link = req.link;
       items.push(
@@ -383,11 +352,8 @@ export function WorkArea() {
 
   return (
     <div className="workarea">
-      {/* The tab strip only appears once a file is open; with no files the area
-          is simply the terminal grid, full height. */}
       {hasFiles && (
       <div className="editor-tabs" role="tablist" aria-label="Workspace tabs">
-        {/* Terminal tab — leftmost, shows the split-pane grid. */}
         <div
           className={`etab etab-term${showTerminal ? " etab-active" : ""}`}
           role="tab"
@@ -408,7 +374,6 @@ export function WorkArea() {
           <span className="etab-title">Terminal</span>
         </div>
 
-        {/* One tab per open file. */}
         {editor.files.map((f) => (
           <div
             key={f.path}
@@ -417,8 +382,6 @@ export function WorkArea() {
             role="tab"
             tabIndex={0}
             aria-selected={f.path === editor.activePath}
-            // Select on press, not click — but only for the primary button so
-            // right/middle clicks don't switch files.
             onPointerDown={(e) => {
               if (e.button !== 0) return;
               store.selectFile(f.path);
@@ -435,8 +398,6 @@ export function WorkArea() {
             <button
               className="etab-close"
               aria-label={`Close ${f.name}`}
-              // Swallow the press so it neither selects the tab underneath nor
-              // steals focus; the action runs on click so keyboard works too.
               onPointerDown={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -510,7 +471,6 @@ export function WorkArea() {
                       onScroll={syncScroll}
                       onKeyDown={onKeyDown}
                       onClick={(e) => {
-                        // ⌘/Ctrl-click a URL to open it in the browser.
                         if (!(e.metaKey || e.ctrlKey)) return;
                         const url = urlAt(e.currentTarget.value, e.currentTarget.selectionStart);
                         if (url) {
@@ -523,9 +483,7 @@ export function WorkArea() {
                         if (ta.value.length > 100000) return;
                         const off = editorOffsetAt(ta, e.clientX, e.clientY);
                         const url = off >= 0 ? urlAt(ta.value, off) : null;
-                        // Pointer only while the open-modifier is held (like VS Code).
                         ta.style.cursor = url && (e.metaKey || e.ctrlKey) ? "pointer" : "";
-                        // Tooltip on any hover, so the shortcut is discoverable.
                         if (url) {
                           if (hintUrlRef.current !== url) {
                             hintUrlRef.current = url;
@@ -573,8 +531,6 @@ export function WorkArea() {
         )}
       </div>
 
-      {/* Bottom terminal panel (⌘J) — its own tabs of scratch shells for running
-          commands while reading a file. Hidden when toggled off; shells persist. */}
       {store.panelOpen && (
         <div className="term-panel" style={{ height: panelHeight }}>
           <div
@@ -686,7 +642,7 @@ function PanelTerminalHost({ paneId }: { paneId: string }) {
     terminals.focus(paneId);
     const ro = new ResizeObserver(() => terminals.fit(paneId));
     ro.observe(el);
-    return () => ro.disconnect(); // never dispose here — the manager owns lifetime
+    return () => ro.disconnect();
   }, [paneId]);
   return (
     <div
@@ -724,7 +680,7 @@ function MarkdownPreview({ source }: { source: string }) {
           e.preventDefault();
           void openUrl(href);
         } else if (!href.startsWith("#")) {
-          e.preventDefault(); // swallow relative/file links we can't resolve
+          e.preventDefault();
         }
       }}
       dangerouslySetInnerHTML={{ __html: html }}

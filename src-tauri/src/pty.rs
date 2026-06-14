@@ -73,16 +73,12 @@ impl PtyManager {
         if let Some(cwd) = cwd {
             cmd.cwd(cwd);
         }
-        // Start as a login shell so the user's shell profile / path_helper
-        // (Homebrew, etc.) runs. Without this, commands like `docker compose`,
-        // `ssh`, and any tool registered via /etc/paths.d go unfound.
         #[cfg(not(target_os = "windows"))]
         cmd.arg("-l");
         cmd.env("TERM", "xterm-256color");
 
         let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
         let pid = child.process_id();
-        // Dropping the slave lets the master observe EOF when the child exits.
         drop(pair.slave);
 
         let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
@@ -90,7 +86,6 @@ impl PtyManager {
 
         let id = self.next_id.fetch_add(1, Ordering::Relaxed) + 1;
 
-        // Reader thread: pump shell output to the frontend until EOF.
         let channel = on_event.clone();
         thread::spawn(move || {
             let engine = base64::engine::general_purpose::STANDARD;
@@ -184,9 +179,6 @@ pub fn process_cwd(pid: u32) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn default_shell() -> String {
-    // Prefer PowerShell 7 (pwsh), then Windows PowerShell; cmd.exe only as a
-    // last resort. COMSPEC points at cmd.exe on every Windows install, so
-    // checking it first would mean nobody ever got PowerShell.
     let path = std::env::var_os("PATH").unwrap_or_default();
     for candidate in ["pwsh.exe", "powershell.exe"] {
         if std::env::split_paths(&path).any(|dir| dir.join(candidate).is_file()) {

@@ -1,8 +1,3 @@
-// User-customizable preferences, persisted to localStorage so they survive
-// restarts. The accent drives every highlight in the UI (active-pane border,
-// tab underlines, divider hover) via the `--accent` / `--pane-border` CSS
-// variables; font size and cursor blink are pushed into every xterm instance.
-
 import { FONT_FAMILY, FONT_SIZE } from "../terminal/theme";
 
 export type CursorStyle = "block" | "bar" | "underline";
@@ -35,12 +30,12 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export const ACCENT_PRESETS = [
-  "#5ac8fa", // blue (default)
-  "#98c379", // green
-  "#e5c07b", // amber
-  "#e06c75", // red
-  "#c678dd", // purple
-  "#56b6c2", // teal
+  "#5ac8fa",
+  "#98c379",
+  "#e5c07b",
+  "#e06c75",
+  "#c678dd",
+  "#56b6c2",
 ];
 
 /** Font choices offered in settings. Each value is a CSS font stack that falls
@@ -80,7 +75,6 @@ export function saveSettings(s: Settings): void {
   try {
     localStorage.setItem(KEY, JSON.stringify(s));
   } catch {
-    /* storage unavailable — settings just won't persist */
   }
 }
 
