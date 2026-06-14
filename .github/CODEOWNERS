@@ -1,0 +1,8 @@
+# Code owners for jterm.
+#
+# When a pull request touches matching paths, GitHub automatically requests a
+# review from the owner(s) listed here. Add teammates (e.g. `@org/maintainers`)
+# as the project grows.
+
+# Default owner for everything in the repo.
+*                       @YosefAshenafi
