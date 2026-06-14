@@ -30,5 +30,5 @@ goes live at `https://yosefashenafi.github.io/jterm/`.
 
 ## Keeping it accurate
 
-Download links point at the `v0.1.0` release assets and the feature copy mirrors
+Download links point at the `v0.2.0` release assets and the feature copy mirrors
 the app's [README](../README.md). Update both when a new version ships.

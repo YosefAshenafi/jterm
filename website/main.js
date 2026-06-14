@@ -1,9 +1,10 @@
 (() => {
   "use strict";
 
-  const RELEASES = "https://github.com/YosefAshenafi/jterm/releases/download/v0.1.0";
-  const MAC_DMG = `${RELEASES}/jterm_0.1.0_universal.dmg`;
-  const WIN_EXE = `${RELEASES}/jterm_0.1.0_x64-setup.exe`;
+  const RELEASES = "https://github.com/YosefAshenafi/jterm/releases/download/v0.2.0";
+  const MAC_DMG = `${RELEASES}/jterm_0.2.0_universal.dmg`;
+  const WIN_EXE = `${RELEASES}/jterm_0.2.0_x64-setup.exe`;
+  const LINUX_DEB = `${RELEASES}/jterm_0.2.0_amd64.deb`;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   const ua = navigator.userAgent;
@@ -40,8 +41,8 @@
     if (primary) primary.href = MAC_DMG;
     detectedBadge(document.getElementById("dl-macos"));
   } else if (isLinux) {
-    if (primaryLabel) primaryLabel.textContent = "Build for Linux";
-    if (primary) primary.href = "docs.html#build";
+    if (primaryLabel) primaryLabel.textContent = "Download for Linux";
+    if (primary) primary.href = LINUX_DEB;
     if (primaryIco) primaryIco.style.display = "none";
     detectedBadge(document.getElementById("dl-linux"));
   } else {
@@ -96,7 +97,7 @@
         dir: "jterm",
         cmd: "cargo run --release",
         out: [
-          { k: "Compiling", v: " jterm v0.1.0" },
+          { k: "Compiling", v: " jterm v0.2.0" },
           { k: "Finished", v: " release in 0.8s" },
           { dim: true, v: "Running `target/release/jterm`" },
         ],

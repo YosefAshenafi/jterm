@@ -137,6 +137,7 @@
           <ul>
             <li><b>macOS</b> (Universal, Intel and Apple Silicon): the <code>.dmg</code>. Drag jterm into Applications.</li>
             <li><b>Windows</b> (x64): the <code>.exe</code> installer, or the <code>.msi</code>.</li>
+            <li><b>Linux</b> (x86_64): the <code>.deb</code> (<code>sudo apt install ./jterm_*.deb</code>), the AppImage (mark executable and run), or the <code>.rpm</code>. See <a href="#build">Linux notes</a> to build it yourself.</li>
           </ul>
           <div class="callout callout-warn">
             <strong>First launch.</strong> Builds are not code-signed yet, so the OS warns you once.
@@ -409,10 +410,10 @@ sudo apt install ./src-tauri/target/release/bundle/deb/jterm_*.deb</code></pre>
             first).
           </p>
           <div class="callout">
-            <strong>Prebuilt Linux packages are on the way.</strong> The release pipeline now builds
-            on Linux, so <code>.deb</code> and AppImage downloads will appear on the
+            <strong>Prefer a prebuilt package?</strong> From v0.2.0, the
             <a href="https://github.com/YosefAshenafi/jterm/releases" rel="noopener">Releases page</a>
-            from the next version. Until then, the build above is the supported path.
+            ships a <code>.deb</code>, an AppImage, and a <code>.rpm</code> for each version, so
+            building from source is optional.
           </div>
         </section>
 
