@@ -162,8 +162,12 @@ export default function App() {
       };
 
       // Sidebar views work from anywhere (⌘B explorer toggle, ⌘⇧F search, ⌘⇧G source control).
+      // "Showing" counts a hover-peek too, so ⌘B hides the explorer immediately
+      // whether it's pinned or just peeked — no need to move the mouse first.
       if (k === "b" && !e.shiftKey) return run(() => {
-        if (store.sidebarOpen && store.sidebarView === "explorer") store.toggleSidebar();
+        const showingExplorer =
+          (store.sidebarOpen || store.sidebarPeek) && store.sidebarView === "explorer";
+        if (showingExplorer) store.hideSidebar();
         else store.openSidebarView("explorer");
       });
       if (k === "f" && e.shiftKey) return run(() => store.openSidebarView("search"));

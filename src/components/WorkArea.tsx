@@ -12,6 +12,7 @@ import { terminals } from "../terminal/manager";
 import { trackPointerDrag } from "../drag";
 import { basename, imageMime, resolveCwd } from "../workspace";
 import { highlightToHtml, languageFromName } from "./syntax";
+import { autoIndentOnEnter, detectIndentUnit } from "./indent";
 import { PaneTree, MenuRequest } from "./PaneTree";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { FindBar } from "./FindBar";
@@ -262,15 +263,39 @@ export function WorkArea() {
     const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey;
 
     if (e.key === "Tab" && !mod) {
-      // Indent with two spaces instead of leaving the editor.
+      // Indent by one unit (the file's own, tab or N spaces) instead of leaving
+      // the editor.
       e.preventDefault();
       const { selectionStart, selectionEnd, value } = ta;
-      const next = value.slice(0, selectionStart) + "  " + value.slice(selectionEnd);
+      const unit = detectIndentUnit(value);
+      const next = value.slice(0, selectionStart) + unit + value.slice(selectionEnd);
       recordEdit(active.path, value, next);
       store.setFileDraft(active.path, next);
-      requestAnimationFrame(() => (ta.selectionStart = ta.selectionEnd = selectionStart + 2));
+      requestAnimationFrame(
+        () => (ta.selectionStart = ta.selectionEnd = selectionStart + unit.length)
+      );
       return;
     }
+
+    if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Auto-indent the new line based on the file type (see ./indent).
+      e.preventDefault();
+      const { selectionStart, selectionEnd, value } = ta;
+      const { value: next, caret } = autoIndentOnEnter(
+        language,
+        value,
+        selectionStart,
+        selectionEnd
+      );
+      recordEdit(active.path, value, next);
+      store.setFileDraft(active.path, next);
+      requestAnimationFrame(() => {
+        const cur = taRef.current;
+        if (cur) cur.selectionStart = cur.selectionEnd = caret;
+      });
+      return;
+    }
+
     if (!mod) return;
     const k = e.key.toLowerCase();
 
