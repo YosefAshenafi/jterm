@@ -161,3 +161,10 @@ export const OpenFolderIcon = (p: SVGProps<SVGSVGElement>) => (
     <path d="M3.4 7.3h11l-1.6 5c-.1.4-.5.7-1 .7H2.9c-.7 0-1.2-.7-1-1.4l1.5-4.3Z" />
   </svg>
 );
+
+export const EyeIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M1.5 8S4 3.6 8 3.6 14.5 8 14.5 8 12 12.4 8 12.4 1.5 8 1.5 8Z" />
+    <circle cx="8" cy="8" r="2" />
+  </svg>
+);

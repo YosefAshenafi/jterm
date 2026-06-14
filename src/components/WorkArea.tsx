@@ -13,6 +13,8 @@ import { trackPointerDrag } from "../drag";
 import { basename, imageMime, resolveCwd } from "../workspace";
 import { highlightToHtml, languageFromName } from "./syntax";
 import { autoIndentOnEnter, detectIndentUnit } from "./indent";
+import { renderMarkdown } from "./markdown";
+import { EyeIcon } from "./icons";
 import { PaneTree, MenuRequest } from "./PaneTree";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { FindBar } from "./FindBar";
@@ -113,6 +115,19 @@ export function WorkArea() {
   const showTerminal = editor.activePath === null;
   const active = editor.files.find((f) => f.path === editor.activePath) ?? null;
   const editing = active && !active.loading && active.saved !== null && !active.image;
+
+  // Markdown files get a rendered Preview toggle in the editor status bar.
+  const isMarkdownFile = (name: string) => /\.(md|markdown|mdown|mkd|mkdn)$/i.test(name);
+  const [previewPaths, setPreviewPaths] = useState<Set<string>>(() => new Set());
+  const togglePreview = (path: string) =>
+    setPreviewPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  const showMdPreview =
+    !!active && isMarkdownFile(active.name) && previewPaths.has(active.path);
 
   // Read each newly opened file exactly once; forget closed files so a re-open
   // pulls a fresh copy from disk.
@@ -460,6 +475,8 @@ export function WorkArea() {
               <div className="editor-note editor-error">⚠ {active.error}</div>
             ) : active.diff ? (
               <GitDiffView content={active.draft} />
+            ) : showMdPreview ? (
+              <MarkdownPreview source={active.draft} />
             ) : (
               <>
                 {active.error ? <div className="editor-banner">⚠ {active.error}</div> : null}
@@ -629,9 +646,21 @@ export function WorkArea() {
       {!showTerminal && active ? (
         <div className="editor-status">
           <span className="editor-status-path">{active.path}</span>
-          <span className="editor-status-state">
-            {editing ? (isDirty(active) ? `Unsaved · ${saveHint} to save` : "Saved") : ""}
-          </span>
+          <div className="editor-status-right">
+            {isMarkdownFile(active.name) ? (
+              <button
+                className={`editor-preview-toggle${previewPaths.has(active.path) ? " active" : ""}`}
+                title="Toggle Markdown preview"
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => togglePreview(active.path)}
+              >
+                <EyeIcon /> {previewPaths.has(active.path) ? "Edit" : "Preview"}
+              </button>
+            ) : null}
+            <span className="editor-status-state">
+              {editing ? (isDirty(active) ? `Unsaved · ${saveHint} to save` : "Saved") : ""}
+            </span>
+          </div>
         </div>
       ) : null}
 
@@ -684,6 +713,28 @@ function PanelTabLabel({ paneId, index }: { paneId: string; index: number }) {
 }
 
 /** Image preview shown in place of the text editor (VS Code-style). */
+/** Rendered Markdown preview (the "Markdown Preview" extension). Links open in
+ * the browser; the source stays one click away via the status-bar toggle. */
+function MarkdownPreview({ source }: { source: string }) {
+  const html = useMemo(() => renderMarkdown(source), [source]);
+  return (
+    <div
+      className="md-preview"
+      onClick={(e) => {
+        const href = (e.target as HTMLElement).closest("a")?.getAttribute("href");
+        if (!href) return;
+        if (/^https?:/i.test(href)) {
+          e.preventDefault();
+          void openUrl(href);
+        } else if (!href.startsWith("#")) {
+          e.preventDefault(); // swallow relative/file links we can't resolve
+        }
+      }}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 function ImagePreview({ src, name }: { src: string; name: string }) {
   const [dim, setDim] = useState<{ w: number; h: number } | null>(null);
   return (

@@ -523,6 +523,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (sidebarOpen) setSidebarPeek(false);
   }, [sidebarOpen]);
 
+  // One-time cleanup: the Extensions feature was removed, so drop its now-orphaned
+  // persisted key on startup.
+  useEffect(() => {
+    try {
+      localStorage.removeItem("jterm.extensions");
+    } catch {
+      /* storage unavailable — nothing to clean */
+    }
+  }, []);
+
   // Persist tab titles across restarts.
   useEffect(() => {
     saveSnapshot(state.tabs, state.activeTabId);
