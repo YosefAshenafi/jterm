@@ -36,7 +36,10 @@
           <a href="index.html#features">Features</a>
           <a href="docs.html" aria-current="page">Docs</a>
           <a href="index.html#download">Download</a>
-          <a href="https://github.com/YosefAshenafi/jterm" rel="noopener">Source</a>
+          <a href="https://github.com/YosefAshenafi/jterm" rel="noopener">
+            <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" width="15" height="15"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.42 7.42 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+            GitHub
+          </a>
         </nav>
 
         <div class="nav-actions">
@@ -52,6 +55,22 @@
     <div class="docs-layout container">
       <!-- ===================== Sidebar ===================== -->
       <aside class="doc-sidebar" id="doc-sidebar" aria-label="Documentation">
+        <div class="doc-search">
+          <svg class="doc-search-ico" viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 14 14" /></svg>
+          <input
+            type="search"
+            id="doc-search-input"
+            class="doc-search-input"
+            placeholder="Search docs"
+            aria-label="Search documentation"
+            aria-expanded="false"
+            aria-controls="doc-search-results"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <kbd class="doc-search-key">/</kbd>
+          <div class="doc-search-results" id="doc-search-results" role="listbox" aria-label="Search results" hidden></div>
+        </div>
         <nav class="doc-nav">
           <p class="doc-nav-group">Getting started</p>
           <a href="#overview">Overview</a>
@@ -334,7 +353,7 @@
           <ul>
             <li><a href="https://nodejs.org" rel="noopener">Node.js</a> 20+ and <a href="https://pnpm.io" rel="noopener">pnpm</a></li>
             <li><a href="https://rustup.rs" rel="noopener">Rust</a> (stable)</li>
-            <li>A platform toolchain: Xcode Command Line Tools on macOS, or MSVC Build Tools + WebView2 on Windows</li>
+            <li>A platform toolchain: Xcode Command Line Tools on macOS, MSVC Build Tools + WebView2 on Windows, or the GTK/WebKit packages on Linux (listed below)</li>
           </ul>
           <p>Then build the native installer:</p>
           <div class="code-wrap">
@@ -358,6 +377,43 @@ cargo test --manifest-path src-tauri/Cargo.toml   <span class="dim"># Rust unit 
             <a href="https://github.com/YosefAshenafi/jterm/blob/main/CONTRIBUTING.md" rel="noopener">CONTRIBUTING.md</a>
             for the project layout and the invariants to respect.
           </p>
+
+          <h3 id="linux">Linux (Ubuntu / Debian)</h3>
+          <p>
+            jterm builds on Linux through Tauri. On Ubuntu 22.04+ or Debian, install the GTK and
+            WebKit build dependencies first:
+          </p>
+          <div class="code-wrap">
+            <pre class="code-block"><code>sudo apt update
+sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf</code></pre>
+            <button class="copy-btn" data-copy="sudo apt update&#10;sudo apt install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf" aria-label="Copy Linux dependencies">
+              <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" width="15" height="15"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+          <p>Then build and install the generated Debian package:</p>
+          <div class="code-wrap">
+            <pre class="code-block"><code>pnpm install
+pnpm tauri build
+sudo apt install ./src-tauri/target/release/bundle/deb/jterm_*.deb</code></pre>
+            <button class="copy-btn" data-copy="pnpm install&#10;pnpm tauri build&#10;sudo apt install ./src-tauri/target/release/bundle/deb/jterm_*.deb" aria-label="Copy build commands">
+              <svg class="ico" viewBox="0 0 16 16" aria-hidden="true" width="15" height="15"><rect x="5" y="5" width="9" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>
+              <span class="copy-label">Copy</span>
+            </button>
+          </div>
+          <p>
+            The build also produces an <b>AppImage</b> in
+            <code>src-tauri/target/release/bundle/appimage/</code> that runs without installing, plus
+            a <code>.rpm</code> for Fedora-family distros (install their equivalent WebKitGTK packages
+            first).
+          </p>
+          <div class="callout">
+            <strong>Prebuilt Linux packages are on the way.</strong> The release pipeline now builds
+            on Linux, so <code>.deb</code> and AppImage downloads will appear on the
+            <a href="https://github.com/YosefAshenafi/jterm/releases" rel="noopener">Releases page</a>
+            from the next version. Until then, the build above is the supported path.
+          </div>
         </section>
 
         <section id="architecture" class="doc-section">
