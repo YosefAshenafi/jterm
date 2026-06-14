@@ -2486,6 +2486,27 @@ body.pane-dragging * {
   animation: modal-in 0.16s ease both;
 }
 
+/* Link toast (e.g. a freshly published repo): anchored bottom-left and
+ * clickable to open the URL in the browser. */
+.toast-link {
+  left: 18px;
+  transform: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--accent);
+}
+.toast-link::after {
+  content: "↗";
+  font-size: 12px;
+  opacity: 0.8;
+}
+.toast-link:hover {
+  border-color: var(--accent);
+  text-decoration: underline;
+}
+
 /* ---- Find bar (⌘F, find in the open file) ---- */
 .find-bar {
   position: absolute;
