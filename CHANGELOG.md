@@ -7,7 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet. See the [roadmap](README.md#roadmap) for what's planned._
+### Added
+
+- **Publish to GitHub**: from Source Control, create a new public or private
+  repository and push the current branch in one step (via the GitHub CLI), with
+  a clickable link to the new repo. Plus discarding individual or all changes.
+- **Markdown preview**: open a `.md` file and toggle a rendered preview from the
+  editor status bar.
+- **Per-tab editor buffers**: each terminal tab keeps its own open files, so a
+  new tab opens empty and switching tabs restores that tab's files.
+- **Editor auto-indent** by file type: new lines copy the current indentation and
+  deepen after a block opener (`{`/`[`/`(`, or a trailing `:` in Python), with
+  matching bracket pairs split onto their own lines.
+- **Quick Open** (`⌘P`), **Go to Line** (`⌘G`), and **Find in file** (`⌘F`).
+- **Bottom terminal panel** (`⌘J`, `⌘⇧J`): a VS Code-style drawer of extra
+  terminals with its own tabs.
+- **Drag a pane** onto another pane's edge, onto a tab, or out into a new tab.
+- **Explorer toggle** (`⌘B`) and an edge-hover peek for the sidebar.
+- Double-click the title bar to maximize; drag the title bar to move the window.
+
+### Changed
+
+- Removed the dialog plugin to eliminate unnecessary macOS permission prompts.
+
+### Fixed
+
+- macOS: Copy/Cut/Paste/Select-All work in text fields such as the Quick Open
+  box (the native Edit menu is intentionally stripped, so these are handled in
+  app).
+- `⌘B` hides the sidebar immediately, even while the pointer is hovering it.
 
 ## [0.1.0] - 2026-06-10
 

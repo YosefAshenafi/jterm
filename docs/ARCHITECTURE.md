@@ -121,14 +121,17 @@ Two details that catch people:
 content, `null` until the read resolves) and `draft` (current editor text). A
 buffer is *dirty* exactly when `draft !== saved`. Saving writes `draft` to disk
 and sets `saved = draft`; closing a dirty buffer prompts first. Buffers are
-global (they don't belong to a terminal tab) and the active file is tracked
-separately so the editor column and the terminal can each hold keyboard focus
-(`focusRegion` decides whether `⌘S`/`⌘W` hit the editor or the terminal).
+**per terminal tab**: the store keeps one editor state per tab id (`editorMap`),
+so a new tab opens empty and switching tabs restores that tab's own open files.
+The active file is tracked separately so the editor column and the terminal can
+each hold keyboard focus (`focusRegion` decides whether `⌘S`/`⌘W` hit the editor
+or the terminal).
 
 ### Settings
 
-`state/settings.ts` persists `{ accent, fontSize, cursorBlink }` to
-`localStorage`. An effect in the store pushes them two ways: into CSS variables
+`state/settings.ts` persists `{ accent, fontFamily, fontSize, editorFontSize,
+lineHeight, cursorStyle, cursorBlink, scrollback }` to `localStorage`. An effect
+in the store pushes them two ways: into CSS variables
 (`--accent`, `--pane-border`) that drive every highlight in the UI, and into the
 terminal manager's `setPrefs`, which updates every live xterm and re-fits after a
 font-size change. The accent doubles as the terminal cursor color so the cursor
@@ -144,7 +147,7 @@ failures surface as rejected promises the UI can show. They group into:
 | PTY     | `pty_spawn`, `pty_write`, `pty_resize`, `pty_kill`                          | Thin wrappers over `PtyManager` (pty.rs). |
 | Files   | `read_dir`, `read_file`, `write_file`, `pane_cwd`                          | `read_file` refuses directories, binaries (NUL in the first 8 KiB), and files over 8 MB. |
 | Search  | `search_in_folder`                                                         | Cancellable, parallel; see below. |
-| Git     | `git_status`, `git_stage`, `git_stage_all`, `git_unstage`, `git_commit`, `git_push`, `git_init` | Shell out to the system `git`. |
+| Git     | `git_status`, `git_stage`(`_all`), `git_unstage`(`_all`), `git_discard`(`_all`), `git_diff`, `git_commit`, `git_push`, `git_init`, `git_publish` | Shell out to the system `git`; `git_publish` uses the GitHub CLI. |
 
 ### PTY management (`pty.rs`)
 
@@ -185,8 +188,12 @@ Rather than link a git library, jterm shells out to the `git` already on your
 `PATH`, so it inherits your config, credentials, and hooks. `git_status` parses
 `git status --porcelain=v1 --branch -uall -z` (NUL-delimited, so filenames with
 spaces or newlines are safe) into a branch, upstream, ahead/behind counts, and
-per-file index/worktree status chars. The other commands are thin `git add` /
-`reset` / `commit` / `push` / `init` wrappers run in the selected folder.
+per-file index/worktree status chars. The other commands are thin wrappers —
+`git add` / `reset` / `checkout` / `diff` / `commit` / `push` / `init` — run in
+the selected folder. **Publish** (`git_publish`) shells out to the
+[GitHub CLI](https://cli.github.com) (`gh repo create … --push`) to create a new
+public/private repo and push, falling back to `git push -u` when a remote already
+exists.
 
 ## Security model
 

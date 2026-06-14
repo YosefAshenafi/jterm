@@ -1,26 +1,23 @@
 import { ReactNode } from "react";
+import { findAllOccurrences } from "./textSearch";
 
 /** Wrap case-insensitive occurrences of `query` in <mark> for a search result
- * row. An empty query returns the text untouched — `indexOf("")` matches at
- * every position without ever advancing, which would loop forever (the panel
- * renders once with stale results right as the query is cleared). */
+ * row. An empty or non-matching query returns the text untouched. */
 export function highlight(text: string, query: string): ReactNode {
-  const q = query.toLowerCase();
-  if (!q) return text;
-  const lower = text.toLowerCase();
+  const hits = findAllOccurrences(text, query);
+  if (!hits.length) return text;
+  const len = query.length;
   const out: ReactNode[] = [];
   let i = 0;
   let n = 0;
-  let idx = lower.indexOf(q, i);
-  while (idx !== -1) {
+  for (const idx of hits) {
     if (idx > i) out.push(text.slice(i, idx));
     out.push(
       <mark key={n++} className="search-hit">
-        {text.slice(idx, idx + q.length)}
+        {text.slice(idx, idx + len)}
       </mark>
     );
-    i = idx + q.length;
-    idx = lower.indexOf(q, i);
+    i = idx + len;
   }
   out.push(text.slice(i));
   return out;

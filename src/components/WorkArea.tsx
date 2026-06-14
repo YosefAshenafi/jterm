@@ -15,12 +15,10 @@ import { highlightToHtml, languageFromName } from "./syntax";
 import { autoIndentOnEnter, detectIndentUnit } from "./indent";
 import { renderMarkdown } from "./markdown";
 import { EyeIcon } from "./icons";
+import { isMac } from "../platform";
 import { PaneTree, MenuRequest } from "./PaneTree";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import { FindBar } from "./FindBar";
-
-const isMac =
-  /mac/i.test(navigator.platform) || /mac/i.test(navigator.userAgent);
 
 // Monospace char width, cached per resolved font (for mapping a mouse point to
 // a text offset in the editor).
@@ -712,9 +710,8 @@ function PanelTabLabel({ paneId, index }: { paneId: string; index: number }) {
   return <span className="ptab-title">{label ?? `Terminal ${index + 1}`}</span>;
 }
 
-/** Image preview shown in place of the text editor (VS Code-style). */
-/** Rendered Markdown preview (the "Markdown Preview" extension). Links open in
- * the browser; the source stays one click away via the status-bar toggle. */
+/** Rendered Markdown preview for .md files. Links open in the browser; the
+ * source stays one click away via the status-bar toggle. */
 function MarkdownPreview({ source }: { source: string }) {
   const html = useMemo(() => renderMarkdown(source), [source]);
   return (
@@ -735,6 +732,7 @@ function MarkdownPreview({ source }: { source: string }) {
   );
 }
 
+/** Image preview shown in place of the text editor (VS Code-style). */
 function ImagePreview({ src, name }: { src: string; name: string }) {
   const [dim, setDim] = useState<{ w: number; h: number } | null>(null);
   return (

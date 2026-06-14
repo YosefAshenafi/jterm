@@ -155,11 +155,7 @@ class TerminalManager {
     this.panes.set(paneId, pane);
 
     term.onData((data) => {
-      if (pane.ptyId != null) {
-        const prev = this.writeQueue.get(paneId) ?? Promise.resolve();
-        const next: Promise<void> = prev.then(() => invoke("pty_write", { id: pane.ptyId, data }) as unknown as Promise<void>);
-        this.writeQueue.set(paneId, next);
-      }
+      if (pane.ptyId != null) this.queueWrite(paneId, pane.ptyId, data);
     });
     term.onTitleChange((title) => this.onTitle?.(paneId, title));
 
@@ -169,9 +165,7 @@ class TerminalManager {
     term.attachCustomKeyEventHandler((ev) => {
       if (ev.key === "Enter" && ev.shiftKey && !ev.ctrlKey && !ev.altKey && !ev.metaKey) {
         if (ev.type === "keydown" && pane.ptyId != null) {
-          const prev = this.writeQueue.get(paneId) ?? Promise.resolve();
-          const next: Promise<void> = prev.then(() => invoke("pty_write", { id: pane.ptyId, data: "\x1b\r" }) as unknown as Promise<void>);
-          this.writeQueue.set(paneId, next);
+          this.queueWrite(paneId, pane.ptyId, "\x1b\r");
         }
         return false; // suppress xterm's plain "\r" in every event phase
       }
@@ -190,6 +184,17 @@ class TerminalManager {
 
   /** Serialize writes per-pane so rapid keystrokes arrive in order. */
   private writeQueue = new Map<string, Promise<void>>();
+
+  /** Queue a PTY write after the pane's pending writes. A failed write is
+   * swallowed so a single rejection can't poison the chain and silently drop
+   * every keystroke that follows. */
+  private queueWrite(paneId: string, ptyId: number, data: string): void {
+    const prev = this.writeQueue.get(paneId) ?? Promise.resolve();
+    const next: Promise<void> = prev
+      .then(() => invoke("pty_write", { id: ptyId, data }) as unknown as Promise<void>)
+      .catch(() => {});
+    this.writeQueue.set(paneId, next);
+  }
 
   /** Pre-assign the directory a not-yet-spawned pane's shell starts in. */
   setSpawnCwd(paneId: string, cwd: Promise<string>): void {

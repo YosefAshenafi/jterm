@@ -1,5 +1,5 @@
-// Minimal, dependency-free Markdown → HTML renderer for the file preview that
-// the "Markdown Preview" extension turns on. Every piece of source text is HTML-
+// Minimal, dependency-free Markdown → HTML renderer for the editor's preview
+// pane. Every piece of source text is HTML-
 // escaped before any transform runs, so the output can only ever contain the
 // tags this file emits — rendered markdown can never inject live markup or
 // scripts. Covers the common CommonMark/GFM subset: headings, emphasis, inline

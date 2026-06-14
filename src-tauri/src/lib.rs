@@ -607,13 +607,9 @@ async fn search_in_folder(
 
 // ---- Git --------------------------------------------------------------------
 
-/// Run a git subcommand in `cwd`, returning stdout on success or stderr on error.
-fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
-    let out = std::process::Command::new("git")
-        .current_dir(cwd)
-        .args(args)
-        .output()
-        .map_err(|e| format!("failed to run git: {e}"))?;
+/// Map a finished process's output to stdout on success, or stderr (falling back
+/// to stdout when stderr is empty) on failure.
+fn command_output(out: std::process::Output) -> Result<String, String> {
     if out.status.success() {
         Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     } else {
@@ -624,6 +620,16 @@ fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
             err
         })
     }
+}
+
+/// Run a git subcommand in `cwd`, returning stdout on success or stderr on error.
+fn run_git(cwd: &str, args: &[&str]) -> Result<String, String> {
+    let out = std::process::Command::new("git")
+        .current_dir(cwd)
+        .args(args)
+        .output()
+        .map_err(|e| format!("failed to run git: {e}"))?;
+    command_output(out)
 }
 
 /// Locate the GitHub CLI. An app launched from Finder inherits a minimal PATH
@@ -658,16 +664,7 @@ fn run_gh(cwd: &str, args: &[&str]) -> Result<String, String> {
         .args(args)
         .output()
         .map_err(|e| format!("failed to run gh: {e}"))?;
-    if out.status.success() {
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-    } else {
-        let err = String::from_utf8_lossy(&out.stderr).into_owned();
-        Err(if err.trim().is_empty() {
-            String::from_utf8_lossy(&out.stdout).into_owned()
-        } else {
-            err
-        })
-    }
+    command_output(out)
 }
 
 #[derive(Serialize)]

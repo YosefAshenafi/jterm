@@ -155,13 +155,6 @@ export const GearIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
-export const OpenFolderIcon = (p: SVGProps<SVGSVGElement>) => (
-  <svg {...base(p)}>
-    <path d="M1.8 4c0-.6.5-1 1-1H6l1.4 1.5h5.8c.5 0 1 .4 1 1v.8H3.4L1.8 11V4Z" />
-    <path d="M3.4 7.3h11l-1.6 5c-.1.4-.5.7-1 .7H2.9c-.7 0-1.2-.7-1-1.4l1.5-4.3Z" />
-  </svg>
-);
-
 export const EyeIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M1.5 8S4 3.6 8 3.6 14.5 8 14.5 8 12 12.4 8 12.4 1.5 8 1.5 8Z" />
