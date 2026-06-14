@@ -29,7 +29,7 @@
   --radius: 16px;
   --radius-sm: 10px;
 
-  --container: 1120px;
+  --container: 1200px;
   --shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -192,18 +192,6 @@ button:focus-visible {
   grid-template-columns: 1.05fr 1fr;
   gap: 56px;
   align-items: center;
-}
-.eyebrow {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--accent);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 5px 13px;
-  margin-bottom: 22px;
 }
 .hero-copy { min-width: 0; }
 .hero-title { font-size: clamp(2rem, 5.6vw, 4.1rem); font-weight: 800; overflow-wrap: break-word; }
@@ -634,6 +622,48 @@ kbd {
   margin-bottom: 10px;
 }
 
+/* ---------------- Support / Buy me a coffee ---------------- */
+.support .section-head { max-width: 34em; margin: 0 auto 36px; text-align: center; }
+.coffee-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 18px;
+  border-radius: 16px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+}
+.pay-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; max-width: 720px; margin: 0 auto; }
+.pay-email {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  max-width: 720px;
+  margin: 26px auto 0;
+}
+.pay-email-label { color: var(--fg-subtle); font-size: 13px; }
+.pay-email code {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--fg);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 14px;
+}
+.support-thanks { text-align: center; margin-top: 32px; color: var(--fg-muted); font-size: 0.95rem; }
+.support-thanks .link-arrow { margin-left: 8px; }
+.coffee-link { color: var(--accent); white-space: nowrap; }
+.coffee-link:hover { text-decoration: underline; }
+@media (max-width: 600px) {
+  .pay-grid { grid-template-columns: 1fr; }
+}
+
 /* ---------------- Footer ---------------- */
 .footer { border-top: 1px solid var(--border); padding: 64px 0 40px; background: var(--bg-subtle); }
 .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 40px; }
@@ -641,6 +671,7 @@ kbd {
 .footer-col h4 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--fg-subtle); margin-bottom: 14px; }
 .footer-col a { display: block; color: var(--fg-muted); font-size: 0.95rem; padding: 5px 0; transition: color 0.15s; }
 .footer-col a:hover { color: var(--fg); }
+.footer .stats { margin: 0 0 44px; padding: 0 0 32px; border-top: none; border-bottom: 1px solid var(--border); }
 .footer-base {
   display: flex;
   justify-content: space-between;
@@ -653,6 +684,8 @@ kbd {
   color: var(--fg-subtle);
   font-family: var(--font-mono);
 }
+.footer-base a { color: var(--fg-muted); transition: color 0.15s; }
+.footer-base a:hover { color: var(--accent); }
 
 /* ---------------- Scroll reveal ---------------- */
 .section-head, .tile, .sc, .dl-card, .hood-copy, .hood-card { will-change: opacity, transform; }
