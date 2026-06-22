@@ -1232,9 +1232,15 @@ mod tests {
     fn unique_target_suffixes_before_the_extension() {
         let dir = scratch("unique-ext");
         std::fs::write(dir.join("a.txt"), b"x").unwrap();
-        assert_eq!(unique_target(&dir, OsStr::new("a.txt")), dir.join("a copy.txt"));
+        assert_eq!(
+            unique_target(&dir, OsStr::new("a.txt")),
+            dir.join("a copy.txt")
+        );
         std::fs::write(dir.join("a copy.txt"), b"x").unwrap();
-        assert_eq!(unique_target(&dir, OsStr::new("a.txt")), dir.join("a copy 2.txt"));
+        assert_eq!(
+            unique_target(&dir, OsStr::new("a.txt")),
+            dir.join("a copy 2.txt")
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1247,7 +1253,10 @@ mod tests {
             dir.join(".gitignore copy")
         );
         std::fs::write(dir.join("README"), b"x").unwrap();
-        assert_eq!(unique_target(&dir, OsStr::new("README")), dir.join("README copy"));
+        assert_eq!(
+            unique_target(&dir, OsStr::new("README")),
+            dir.join("README copy")
+        );
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1260,7 +1269,10 @@ mod tests {
         std::fs::write(src.join("sub").join("b.txt"), b"world").unwrap();
         let dest = base.join("dest");
         copy_dir_recursive(&src, &dest).unwrap();
-        assert_eq!(std::fs::read_to_string(dest.join("a.txt")).unwrap(), "hello");
+        assert_eq!(
+            std::fs::read_to_string(dest.join("a.txt")).unwrap(),
+            "hello"
+        );
         assert_eq!(
             std::fs::read_to_string(dest.join("sub").join("b.txt")).unwrap(),
             "world"
