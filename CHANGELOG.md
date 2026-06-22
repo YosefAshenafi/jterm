@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet. See the [roadmap](README.md#roadmap)._
+### Added
+
+- **Copy & paste files in the Explorer**: right-click a file or folder to copy
+  it, then paste into any folder (onto a folder drops files inside it; onto a
+  file, into its folder). Files copied in Finder paste in too, and the more
+  recent of the two copies wins. Pastes never overwrite — a name clash gains a
+  ` copy` suffix — and folders are copied recursively.
+- **Reveal in Finder / File Explorer**: right-click any file or folder to show
+  it in the system file manager.
 
 ## [0.2.0] - 2026-06-14
 
