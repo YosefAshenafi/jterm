@@ -1,9 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface MenuItem {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /** Render a divider above this item, grouping it apart from the previous one. */
+  separator?: boolean;
 }
 
 interface Props {
@@ -46,26 +48,28 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
       onPointerDown={(e) => e.stopPropagation()}
     >
       {items.map((item, i) => (
-        <button
-          key={i}
-          className="context-item"
-          disabled={item.disabled}
-          onPointerDown={(e) => {
-            if (e.button !== 0) return;
-            if (!item.disabled) {
-              item.onClick();
-              onClose();
-            }
-          }}
-          onClick={(e) => {
-            if (e.detail === 0 && !item.disabled) {
-              item.onClick();
-              onClose();
-            }
-          }}
-        >
-          {item.label}
-        </button>
+        <Fragment key={i}>
+          {item.separator && i > 0 && <div className="context-separator" />}
+          <button
+            className="context-item"
+            disabled={item.disabled}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return;
+              if (!item.disabled) {
+                item.onClick();
+                onClose();
+              }
+            }}
+            onClick={(e) => {
+              if (e.detail === 0 && !item.disabled) {
+                item.onClick();
+                onClose();
+              }
+            }}
+          >
+            {item.label}
+          </button>
+        </Fragment>
       ))}
     </div>
   );

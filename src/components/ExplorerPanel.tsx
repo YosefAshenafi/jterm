@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { useStore } from "../state/store";
 import { terminals } from "../terminal/manager";
-import { basename, resolveCwd, shellQuote } from "../workspace";
+import { isMac } from "../platform";
+import { basename, dirname, resolveCwd, shellQuote } from "../workspace";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import {
   ChevronIcon,
@@ -17,6 +19,35 @@ interface Entry {
   name: string;
   path: string;
   is_dir: boolean;
+}
+
+/** Paths the user "Copy"d in the tree, kept in-app so Copy → Paste works the
+ * same on every platform without round-tripping through the OS clipboard. */
+let fileClipboard: string[] = [];
+/** The OS clipboard's change id when `fileClipboard` was set. Lets Paste tell
+ * whether the system clipboard has been updated since (a Finder copy), so the
+ * more recent of the two wins. */
+let fileClipboardCount = -1;
+
+const REVEAL_LABEL = isMac ? "Reveal in Finder" : "Reveal in File Explorer";
+
+/** Mark a path for pasting and remember where the OS clipboard stood, so a later
+ * Finder copy is recognised as newer. */
+async function copyEntry(path: string) {
+  fileClipboard = [path];
+  fileClipboardCount = await invoke<number>("clipboard_change_count").catch(() => fileClipboardCount);
+}
+
+/** What a Paste would copy. The in-app "Copy" wins only while the OS clipboard
+ * hasn't advanced past it; once the user copies anything elsewhere (e.g. files
+ * in Finder), that newer copy takes over. */
+async function resolvePasteSources(): Promise<string[]> {
+  const [systemPaths, count] = await Promise.all([
+    invoke<string[]>("clipboard_file_paths").catch(() => [] as string[]),
+    invoke<number>("clipboard_change_count").catch(() => fileClipboardCount),
+  ]);
+  if (fileClipboard.length && count === fileClipboardCount) return fileClipboard;
+  return systemPaths;
 }
 
 /** Shared callbacks + controlled expansion state threaded through the tree. */
@@ -106,10 +137,16 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
 /** File-tree view: click a file to open it, double-click a folder to `cd`,
  * single-click a folder to expand/collapse. "Collapse all" folds every folder. */
 export function ExplorerPanel() {
-  const { projectRoot, activePaneId, openFile, editor } = useStore();
+  const { projectRoot, activePaneId, openFile, editor, showToast } = useStore();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
-  const [menu, setMenu] = useState<{ x: number; y: number; entry: Entry } | null>(null);
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    entry: Entry;
+    /** Paths available to paste, resolved when the menu opened. */
+    pasteSources: string[];
+  } | null>(null);
   const [fallbackRoot, setFallbackRoot] = useState<string | null>(null);
   const activePath = editor.activePath;
 
@@ -181,18 +218,44 @@ export function ExplorerPanel() {
       }),
     onFile: (path) => openFile(path),
     onCd: (path) => activePaneId && terminals.sendText(activePaneId, `cd ${shellQuote(path)}\r`),
-    onMenu: (e, entry) => {
+    onMenu: async (e, entry) => {
       e.preventDefault();
-      setMenu({ x: e.clientX, y: e.clientY, entry });
+      const { clientX: x, clientY: y } = e;
+      const pasteSources = await resolvePasteSources();
+      setMenu({ x, y, entry, pasteSources });
     },
   };
 
-  const menuItems = (entry: Entry): MenuItem[] => {
+  /** Copy `sources` into `destDir`, then refresh the tree so they appear. */
+  const doPaste = async (sources: string[], destDir: string) => {
+    try {
+      const created = await invoke<string[]>("copy_entries", { sources, destDir });
+      setExpanded((prev) => new Set(prev).add(destDir));
+      setRefreshKey((k) => k + 1);
+      const n = created.length;
+      showToast(`Pasted ${n} item${n === 1 ? "" : "s"} into ${basename(destDir)}`);
+    } catch (err) {
+      showToast(`Paste failed: ${err}`);
+    }
+  };
+
+  const menuItems = (menu: { entry: Entry; pasteSources: string[] }): MenuItem[] => {
+    const { entry, pasteSources } = menu;
+    // Pasting onto a folder drops files inside it; onto a file, into its folder.
+    const pasteDir = entry.is_dir ? entry.path : dirname(entry.path);
+    const count = pasteSources.length;
     const items: MenuItem[] = entry.is_dir
       ? [{ label: "Open in Terminal (cd)", disabled: !activePaneId, onClick: () => ctx.onCd(entry.path) }]
       : [{ label: "Open", onClick: () => openFile(entry.path) }];
     items.push(
-      { label: "Copy Path", onClick: () => void writeText(entry.path) },
+      { label: REVEAL_LABEL, onClick: () => void revealItemInDir(entry.path) },
+      { label: "Copy", separator: true, onClick: () => void copyEntry(entry.path) },
+      {
+        label: count > 1 ? `Paste ${count} Items` : "Paste",
+        disabled: count === 0 || !pasteDir,
+        onClick: () => void doPaste(pasteSources, pasteDir),
+      },
+      { label: "Copy Path", separator: true, onClick: () => void writeText(entry.path) },
       { label: "Copy Name", onClick: () => void writeText(entry.name) },
       {
         label: "Paste to Terminal",
@@ -243,7 +306,7 @@ export function ExplorerPanel() {
         <ContextMenu
           x={menu.x}
           y={menu.y}
-          items={menuItems(menu.entry)}
+          items={menuItems(menu)}
           onClose={() => setMenu(null)}
         />
       )}

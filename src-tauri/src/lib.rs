@@ -178,6 +178,98 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
     .await
 }
 
+/// Pick a non-existing path in `dir` for `name`, inserting " copy", " copy 2", …
+/// before the extension when something is already there — the Finder
+/// paste-into-the-same-folder behaviour, so a paste never overwrites a file.
+fn unique_target(dir: &std::path::Path, name: &std::ffi::OsStr) -> std::path::PathBuf {
+    let direct = dir.join(name);
+    if !direct.exists() {
+        return direct;
+    }
+    let name = std::path::Path::new(name);
+    // `file_stem`/`extension` keep dotfiles intact: ".gitignore" has no
+    // extension, so it becomes ".gitignore copy" rather than "copy.gitignore".
+    let stem = name
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let ext = name.extension().map(|e| e.to_string_lossy().into_owned());
+    for n in 1.. {
+        let suffix = if n == 1 {
+            " copy".to_string()
+        } else {
+            format!(" copy {n}")
+        };
+        let fname = match &ext {
+            Some(ext) => format!("{stem}{suffix}.{ext}"),
+            None => format!("{stem}{suffix}"),
+        };
+        let candidate = dir.join(fname);
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    unreachable!("the loop above only ends by returning")
+}
+
+/// Recursively copy a directory tree from `src` into the new directory `dest`.
+fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dest).map_err(|e| e.to_string())?;
+    for entry in std::fs::read_dir(src).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
+/// Copy files and/or folders into `dest_dir`, returning the created paths. Backs
+/// the explorer's Copy → Paste: each source keeps its name, gaining a " copy"
+/// suffix only when the destination already has that name, so a paste is never
+/// destructive. Pasting a folder into itself or one of its descendants is
+/// refused (it would recurse forever).
+#[tauri::command]
+async fn copy_entries(sources: Vec<String>, dest_dir: String) -> Result<Vec<String>, String> {
+    blocking(move || {
+        let dest = std::path::Path::new(&dest_dir);
+        if !dest.is_dir() {
+            return Err("Destination is not a folder".into());
+        }
+        let canon_dest = std::fs::canonicalize(dest).map_err(|e| e.to_string())?;
+        let mut created = Vec::new();
+        for src in &sources {
+            let src_path = std::path::Path::new(src);
+            let meta = std::fs::symlink_metadata(src_path).map_err(|e| format!("{src}: {e}"))?;
+            let name = src_path
+                .file_name()
+                .ok_or_else(|| format!("Invalid path: {src}"))?;
+            if meta.is_dir() {
+                let canon_src = std::fs::canonicalize(src_path).map_err(|e| e.to_string())?;
+                if canon_dest == canon_src || canon_dest.starts_with(&canon_src) {
+                    return Err(format!(
+                        "Can't paste “{}” into itself",
+                        name.to_string_lossy()
+                    ));
+                }
+            }
+            let target = unique_target(dest, name);
+            if meta.is_dir() {
+                copy_dir_recursive(src_path, &target)?;
+            } else {
+                std::fs::copy(src_path, &target).map_err(|e| format!("{src}: {e}"))?;
+            }
+            created.push(target.to_string_lossy().into_owned());
+        }
+        Ok(created)
+    })
+    .await
+}
+
 /// Save a photo/screenshot from the clipboard to a temp PNG so its path can be
 /// pasted into the shell. Returns `None` when the clipboard holds no image.
 #[tauri::command]
@@ -224,19 +316,52 @@ fn clipboard_file_paths() -> Vec<String> {
     }
 }
 
+/// Monotonic id of the system clipboard's current contents — it advances every
+/// time any app writes to the clipboard. The explorer records it at "Copy" time
+/// so Paste can tell whether the OS clipboard was updated *after* that in-app
+/// Copy (a Finder copy since then), and prefer whichever is more recent. Returns
+/// 0 off macOS, where there's no such counter and the in-app copy simply wins.
+#[tauri::command]
+fn clipboard_change_count() -> i64 {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::NSPasteboard;
+        NSPasteboard::generalPasteboard().changeCount() as i64
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        0
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn read_clipboard_file_paths() -> Vec<String> {
     use objc2_app_kit::NSPasteboard;
     use objc2_foundation::{NSString, NSURL};
 
+    let url_to_path = |s: &NSString| {
+        NSURL::URLWithString(s)
+            .and_then(|url| url.path())
+            .map(|p| p.to_string())
+    };
+
     let mut out = Vec::new();
     let pb = NSPasteboard::generalPasteboard();
     let ty = NSString::from_str("public.file-url");
-    if let Some(s) = pb.stringForType(&ty) {
-        if let Some(url) = NSURL::URLWithString(&s) {
-            if let Some(path) = url.path() {
-                out.push(path.to_string());
+    // Finder copies several files as one pasteboard item per file, each carrying
+    // its own file URL — iterate them so "copy 3 files" yields all three paths,
+    // not just the first (the explorer's Paste then pastes every one).
+    if let Some(items) = pb.pasteboardItems() {
+        for item in items.iter() {
+            if let Some(path) = item.stringForType(&ty).and_then(|s| url_to_path(&s)) {
+                out.push(path);
             }
+        }
+    }
+    // Fall back to the combined file URL when no per-item URL was present.
+    if out.is_empty() {
+        if let Some(path) = pb.stringForType(&ty).and_then(|s| url_to_path(&s)) {
+            out.push(path);
         }
     }
     out
@@ -979,9 +1104,11 @@ pub fn run() {
             read_file_base64,
             download_url,
             write_file,
+            copy_entries,
             pane_cwd,
             save_clipboard_image,
             clipboard_file_paths,
+            clipboard_change_count,
             list_files,
             search_in_folder,
             git_status,
@@ -1082,5 +1209,74 @@ mod tests {
         assert_eq!(files[0].path, "renamed.rs");
         assert_eq!((files[0].x.as_str(), files[0].y.as_str()), (" ", "R"));
         assert_eq!(files[1].path, "real.rs");
+    }
+
+    use std::ffi::OsStr;
+
+    /// Fresh, empty temp dir unique to one test (so parallel tests don't clash).
+    fn scratch(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("jterm-test-{tag}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn unique_target_uses_the_name_when_free() {
+        let dir = scratch("unique-free");
+        assert_eq!(unique_target(&dir, OsStr::new("a.txt")), dir.join("a.txt"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn unique_target_suffixes_before_the_extension() {
+        let dir = scratch("unique-ext");
+        std::fs::write(dir.join("a.txt"), b"x").unwrap();
+        assert_eq!(
+            unique_target(&dir, OsStr::new("a.txt")),
+            dir.join("a copy.txt")
+        );
+        std::fs::write(dir.join("a copy.txt"), b"x").unwrap();
+        assert_eq!(
+            unique_target(&dir, OsStr::new("a.txt")),
+            dir.join("a copy 2.txt")
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn unique_target_keeps_dotfiles_and_extensionless_names_intact() {
+        let dir = scratch("unique-dot");
+        std::fs::write(dir.join(".gitignore"), b"x").unwrap();
+        assert_eq!(
+            unique_target(&dir, OsStr::new(".gitignore")),
+            dir.join(".gitignore copy")
+        );
+        std::fs::write(dir.join("README"), b"x").unwrap();
+        assert_eq!(
+            unique_target(&dir, OsStr::new("README")),
+            dir.join("README copy")
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn copy_dir_recursive_copies_the_whole_tree() {
+        let base = scratch("copydir");
+        let src = base.join("src");
+        std::fs::create_dir_all(src.join("sub")).unwrap();
+        std::fs::write(src.join("a.txt"), b"hello").unwrap();
+        std::fs::write(src.join("sub").join("b.txt"), b"world").unwrap();
+        let dest = base.join("dest");
+        copy_dir_recursive(&src, &dest).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dest.join("a.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dest.join("sub").join("b.txt")).unwrap(),
+            "world"
+        );
+        std::fs::remove_dir_all(&base).unwrap();
     }
 }

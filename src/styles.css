@@ -1715,6 +1715,11 @@ body.pane-dragging * {
 .context-item:disabled {
   color: var(--text-dim);
 }
+.context-separator {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
 
 /* ---- Settings modal ---- */
 @keyframes modal-overlay-in {
