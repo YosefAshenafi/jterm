@@ -178,6 +178,72 @@ async fn write_file(path: String, content: String) -> Result<(), String> {
     .await
 }
 
+/// Create an empty file at `path`, making any missing parent directories first
+/// (so "src/utils/new.ts" works like VS Code). Refuses to clobber an existing
+/// file or folder so a "New File" never silently destroys one.
+#[tauri::command]
+async fn create_file(path: String) -> Result<(), String> {
+    blocking(move || {
+        let target = std::path::Path::new(&path);
+        if target.exists() {
+            return Err(format!("“{}” already exists", display_name(target, &path)));
+        }
+        if let Some(parent) = target.parent().filter(|p| !p.as_os_str().is_empty()) {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        // `create_new` fails if the path appeared between the check above and
+        // here, closing the last gap against clobbering a file.
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(target)
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+}
+
+/// Create a directory at `path`, making any missing parents. Refuses to clobber
+/// an existing file or folder.
+#[tauri::command]
+async fn create_dir(path: String) -> Result<(), String> {
+    blocking(move || {
+        let target = std::path::Path::new(&path);
+        if target.exists() {
+            return Err(format!("“{}” already exists", display_name(target, &path)));
+        }
+        std::fs::create_dir_all(target).map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+}
+
+/// Delete a file or directory (folders are removed recursively). Backs the
+/// explorer's Delete action; the confirmation prompt lives in the UI.
+#[tauri::command]
+async fn delete_entry(path: String) -> Result<(), String> {
+    blocking(move || {
+        let target = std::path::Path::new(&path);
+        // `symlink_metadata` so a symlink to a folder is unlinked, not recursed
+        // into and emptied.
+        let meta = std::fs::symlink_metadata(target).map_err(|e| e.to_string())?;
+        if meta.is_dir() {
+            std::fs::remove_dir_all(target).map_err(|e| e.to_string())
+        } else {
+            std::fs::remove_file(target).map_err(|e| e.to_string())
+        }
+    })
+    .await
+}
+
+/// The final path segment for an error message, falling back to the raw input.
+fn display_name(target: &std::path::Path, raw: &str) -> String {
+    target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| raw.to_string())
+}
+
 /// Pick a non-existing path in `dir` for `name`, inserting " copy", " copy 2", …
 /// before the extension when something is already there — the Finder
 /// paste-into-the-same-folder behaviour, so a paste never overwrites a file.
@@ -1104,6 +1170,9 @@ pub fn run() {
             read_file_base64,
             download_url,
             write_file,
+            create_file,
+            create_dir,
+            delete_entry,
             copy_entries,
             pane_cwd,
             save_clipboard_image,

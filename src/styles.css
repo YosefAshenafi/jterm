@@ -918,6 +918,10 @@ body {
 .tree-row:hover {
   background: #1c2330;
 }
+/* The last-clicked row — shows where the toolbar's New File/Folder will land. */
+.tree-row-selected {
+  background: #222b3a;
+}
 /* The file currently open in the editor — highlighted like VS Code. */
 .tree-row-active {
   background: var(--accent-soft);
@@ -957,6 +961,23 @@ body {
   color: var(--text-dim);
   font-size: 12px;
   padding: 3px 8px;
+}
+/* Inline name box for a new file/folder (VS Code-style create-in-place). */
+.tree-create-row {
+  cursor: text;
+}
+.tree-create-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  outline: none;
 }
 
 /* ---- Editor (file view beside the folder tree) ---- */
@@ -1714,6 +1735,13 @@ body.pane-dragging * {
 }
 .context-item:disabled {
   color: var(--text-dim);
+}
+.context-item.danger {
+  color: #ff6b6b;
+}
+.context-item.danger:hover:not(:disabled) {
+  background: #d64545;
+  color: #fff;
 }
 .context-separator {
   height: 1px;

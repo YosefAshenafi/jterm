@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -6,12 +6,15 @@ import { useStore } from "../state/store";
 import { terminals } from "../terminal/manager";
 import { isMac } from "../platform";
 import { basename, dirname, resolveCwd, shellQuote } from "../workspace";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { ContextMenu, MenuItem } from "./ContextMenu";
 import {
   ChevronIcon,
   CollapseAllIcon,
   FileIcon,
   FolderIcon,
+  NewFileIcon,
+  NewFolderIcon,
   SyncIcon,
 } from "./icons";
 
@@ -19,6 +22,25 @@ interface Entry {
   name: string;
   path: string;
   is_dir: boolean;
+}
+
+/** A pending "New File"/"New Folder": an inline input rendered inside
+ * `parentDir`'s row list until the user names it or presses Escape. */
+interface Creating {
+  parentDir: string;
+  kind: "file" | "folder";
+}
+
+/** Where a "New File"/"New Folder" lands relative to an entry: inside a folder,
+ * or alongside a file in its own folder — matching VS Code. */
+function createDirFor(entry: Entry): string {
+  return entry.is_dir ? entry.path : dirname(entry.path);
+}
+
+/** Join a directory and a (possibly nested, e.g. "a/b") child name. Forward
+ * slashes work for `std::fs` on every platform, so we don't special-case "\". */
+function joinPath(dir: string, name: string): string {
+  return `${dir.replace(/[\\/]+$/, "")}/${name.replace(/^[\\/]+/, "")}`;
 }
 
 /** Paths the user "Copy"d in the tree, kept in-app so Copy → Paste works the
@@ -55,14 +77,77 @@ interface ExplorerCtx {
   expanded: Set<string>;
   /** Path of the file currently open in the editor (highlighted in the tree). */
   activePath: string | null;
+  /** Path of the last-clicked row — where the toolbar's New File/Folder lands. */
+  selected: string | null;
+  /** A pending inline create, rendered inside its `parentDir`. */
+  creating: Creating | null;
   toggle: (path: string) => void;
   onFile: (path: string) => void;
   onCd: (path: string) => void;
   onMenu: (e: React.MouseEvent, entry: Entry) => void;
+  select: (entry: Entry) => void;
+  submitCreate: (name: string) => void;
+  cancelCreate: () => void;
 }
 
 function indentStyle(depth: number) {
   return { paddingLeft: 8 + depth * 12 };
+}
+
+/** The inline name box for a new file/folder. Commits on Enter or blur, cancels
+ * on Escape; an empty name just cancels. */
+function CreateRow({
+  depth,
+  kind,
+  onSubmit,
+  onCancel,
+}: {
+  depth: number;
+  kind: "file" | "folder";
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  // Enter blurs the input, so guard against committing twice.
+  const done = useRef(false);
+  useEffect(() => {
+    ref.current?.focus();
+  }, []);
+  const finish = (commit: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    if (commit) onSubmit(ref.current?.value ?? "");
+    else onCancel();
+  };
+  return (
+    <div className="tree-row tree-create-row" style={indentStyle(depth)}>
+      <span className="tree-chevron-spacer" />
+      {kind === "folder" ? (
+        <FolderIcon className="tree-icon folder" />
+      ) : (
+        <FileIcon className="tree-icon file" />
+      )}
+      <input
+        ref={ref}
+        className="tree-create-input"
+        spellCheck={false}
+        autoComplete="off"
+        placeholder={kind === "folder" ? "folder name" : "file name"}
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            finish(true);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            finish(false);
+          }
+        }}
+        onBlur={() => finish(true)}
+      />
+    </div>
+  );
 }
 
 function DirChildren({ path, depth, ctx }: { path: string; depth: number; ctx: ExplorerCtx }) {
@@ -81,12 +166,38 @@ function DirChildren({ path, depth, ctx }: { path: string; depth: number; ctx: E
     };
   }, [path]);
 
-  if (error) return <div className="tree-note" style={indentStyle(depth)}>⚠ {error}</div>;
-  if (!entries) return <div className="tree-note" style={indentStyle(depth)}>…</div>;
-  if (entries.length === 0) return <div className="tree-note" style={indentStyle(depth)}>(empty)</div>;
+  const creatingHere =
+    ctx.creating && ctx.creating.parentDir === path ? ctx.creating : null;
+  const createRow = creatingHere ? (
+    <CreateRow
+      depth={depth}
+      kind={creatingHere.kind}
+      onSubmit={ctx.submitCreate}
+      onCancel={ctx.cancelCreate}
+    />
+  ) : null;
+
+  if (error)
+    return (
+      <>
+        {createRow}
+        <div className="tree-note" style={indentStyle(depth)}>⚠ {error}</div>
+      </>
+    );
+  if (!entries)
+    return (
+      <>
+        {createRow}
+        {!createRow && <div className="tree-note" style={indentStyle(depth)}>…</div>}
+      </>
+    );
 
   return (
     <>
+      {createRow}
+      {entries.length === 0 && !createRow && (
+        <div className="tree-note" style={indentStyle(depth)}>(empty)</div>
+      )}
       {entries.map((entry) => (
         <EntryRow key={entry.path} entry={entry} depth={depth} ctx={ctx} />
       ))}
@@ -95,15 +206,19 @@ function DirChildren({ path, depth, ctx }: { path: string; depth: number; ctx: E
 }
 
 function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: ExplorerCtx }) {
+  const selected = entry.path === ctx.selected;
   if (!entry.is_dir) {
     const active = entry.path === ctx.activePath;
     return (
       <button
-        className={`tree-row${active ? " tree-row-active" : ""}`}
+        className={`tree-row${selected ? " tree-row-selected" : ""}${active ? " tree-row-active" : ""}`}
         style={indentStyle(depth)}
         title={entry.path}
         onPointerDown={(e) => e.preventDefault()}
-        onClick={() => ctx.onFile(entry.path)}
+        onClick={() => {
+          ctx.select(entry);
+          ctx.onFile(entry.path);
+        }}
         onContextMenu={(e) => ctx.onMenu(e, entry)}
       >
         <span className="tree-chevron-spacer" />
@@ -117,11 +232,14 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
   return (
     <>
       <button
-        className="tree-row"
+        className={`tree-row${selected ? " tree-row-selected" : ""}`}
         style={indentStyle(depth)}
         title={`${entry.path}  ·  double-click to cd`}
         onPointerDown={(e) => e.preventDefault()}
-        onClick={() => ctx.toggle(entry.path)}
+        onClick={() => {
+          ctx.select(entry);
+          ctx.toggle(entry.path);
+        }}
         onDoubleClick={() => ctx.onCd(entry.path)}
         onContextMenu={(e) => ctx.onMenu(e, entry)}
       >
@@ -137,7 +255,7 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
 /** File-tree view: click a file to open it, double-click a folder to `cd`,
  * single-click a folder to expand/collapse. "Collapse all" folds every folder. */
 export function ExplorerPanel() {
-  const { projectRoot, activePaneId, openFile, editor, showToast } = useStore();
+  const { projectRoot, activePaneId, openFile, requestCloseFile, editor, showToast } = useStore();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const [menu, setMenu] = useState<{
@@ -148,6 +266,13 @@ export function ExplorerPanel() {
     pasteSources: string[];
   } | null>(null);
   const [fallbackRoot, setFallbackRoot] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Entry | null>(null);
+  const [creating, setCreating] = useState<Creating | null>(null);
+  const [confirm, setConfirm] = useState<{
+    title: string;
+    message: string;
+    run: () => void;
+  } | null>(null);
   const activePath = editor.activePath;
 
   useEffect(() => {
@@ -207,9 +332,36 @@ export function ExplorerPanel() {
     };
   }, [activePath, expanded]);
 
+  /** Open the inline name box for a new file/folder inside `targetDir`. */
+  const beginCreate = (kind: "file" | "folder", targetDir: string) => {
+    setExpanded((prev) => new Set(prev).add(targetDir));
+    setCreating({ parentDir: targetDir, kind });
+  };
+
+  /** Create the named file/folder, then refresh so it shows; new files open. */
+  const submitCreate = async (rawName: string) => {
+    const c = creating;
+    setCreating(null);
+    if (!c) return;
+    const name = rawName.trim().replace(/^[\\/]+|[\\/]+$/g, "");
+    if (!name) return;
+    const path = joinPath(c.parentDir, name);
+    try {
+      await invoke(c.kind === "folder" ? "create_dir" : "create_file", { path });
+      setExpanded((prev) => new Set(prev).add(c.parentDir));
+      setRefreshKey((k) => k + 1);
+      if (c.kind === "file") openFile(path);
+      showToast(`Created ${basename(path)}`);
+    } catch (err) {
+      showToast(`Could not create: ${err}`);
+    }
+  };
+
   const ctx: ExplorerCtx = {
     expanded,
     activePath,
+    selected: selected?.path ?? null,
+    creating,
     toggle: (path) =>
       setExpanded((prev) => {
         const next = new Set(prev);
@@ -220,10 +372,23 @@ export function ExplorerPanel() {
     onCd: (path) => activePaneId && terminals.sendText(activePaneId, `cd ${shellQuote(path)}\r`),
     onMenu: async (e, entry) => {
       e.preventDefault();
+      // Keep the event off the panel body so its root menu doesn't also fire.
+      e.stopPropagation();
+      setSelected(entry);
       const { clientX: x, clientY: y } = e;
       const pasteSources = await resolvePasteSources();
       setMenu({ x, y, entry, pasteSources });
     },
+    select: (entry) => setSelected(entry),
+    submitCreate,
+    cancelCreate: () => setCreating(null),
+  };
+
+  /** Right-clicking the explorer background (or the header title) targets the
+   * project root itself, so you can paste into / reveal / cd the root too. */
+  const onRootMenu = (e: React.MouseEvent) => {
+    if (!root) return;
+    ctx.onMenu(e, { name: basename(root), path: root, is_dir: true });
   };
 
   /** Copy `sources` into `destDir`, then refresh the tree so they appear. */
@@ -239,16 +404,53 @@ export function ExplorerPanel() {
     }
   };
 
+  /** Delete `entry` from disk, closing any open editor tab it covered, then
+   * refresh the tree. Wrapped in a confirmation by `requestDelete`. */
+  const doDelete = async (entry: Entry) => {
+    try {
+      await invoke("delete_entry", { path: entry.path });
+      const base = entry.path.replace(/[\\/]+$/, "");
+      editor.files.forEach((f) => {
+        if (f.path === base || f.path.startsWith(base + "/") || f.path.startsWith(base + "\\")) {
+          void requestCloseFile(f.path);
+        }
+      });
+      setSelected((s) => (s?.path === entry.path ? null : s));
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        next.delete(entry.path);
+        return next;
+      });
+      setRefreshKey((k) => k + 1);
+      showToast(`Deleted ${entry.name}`);
+    } catch (err) {
+      showToast(`Delete failed: ${err}`);
+    }
+  };
+
+  const requestDelete = (entry: Entry) =>
+    setConfirm({
+      title: `Delete ${entry.is_dir ? "folder" : "file"}`,
+      message: entry.is_dir
+        ? `Delete the folder “${entry.name}” and everything inside it? This cannot be undone.`
+        : `Delete the file “${entry.name}”? This cannot be undone.`,
+      run: () => void doDelete(entry),
+    });
+
   const menuItems = (menu: { entry: Entry; pasteSources: string[] }): MenuItem[] => {
     const { entry, pasteSources } = menu;
     // Pasting onto a folder drops files inside it; onto a file, into its folder.
     const pasteDir = entry.is_dir ? entry.path : dirname(entry.path);
+    const newDir = createDirFor(entry);
     const count = pasteSources.length;
+    const isRoot = !!root && entry.path === root;
     const items: MenuItem[] = entry.is_dir
       ? [{ label: "Open in Terminal (cd)", disabled: !activePaneId, onClick: () => ctx.onCd(entry.path) }]
       : [{ label: "Open", onClick: () => openFile(entry.path) }];
     items.push(
-      { label: REVEAL_LABEL, onClick: () => void revealItemInDir(entry.path) },
+      { label: "New File…", separator: true, onClick: () => beginCreate("file", newDir) },
+      { label: "New Folder…", onClick: () => beginCreate("folder", newDir) },
+      { label: REVEAL_LABEL, separator: true, onClick: () => void revealItemInDir(entry.path) },
       { label: "Copy", separator: true, onClick: () => void copyEntry(entry.path) },
       {
         label: count > 1 ? `Paste ${count} Items` : "Paste",
@@ -264,16 +466,53 @@ export function ExplorerPanel() {
           activePaneId && terminals.sendText(activePaneId, `${shellQuote(entry.path)} `),
       }
     );
+    if (!isRoot) {
+      items.push({
+        label: "Delete",
+        separator: true,
+        danger: true,
+        onClick: () => requestDelete(entry),
+      });
+    }
     return items;
   };
+
+  // Where the toolbar's New File/Folder lands: inside the selected folder (or a
+  // selected file's folder), else the project root — VS Code's behaviour.
+  const createTarget = selected ? createDirFor(selected) : root;
+  const createTargetName = createTarget ? basename(createTarget) : null;
 
   return (
     <div className="panel">
       <div className="panel-header">
-        <span className="panel-title" title={root ?? undefined}>
+        <span
+          className="panel-title"
+          title={root ?? undefined}
+          onContextMenu={onRootMenu}
+        >
           {root ? basename(root) : "Explorer"}
         </span>
         <div className="panel-actions">
+          <button
+            className="tool-btn icon-btn small"
+            title={createTargetName ? `New file in ${createTargetName}` : "New file"}
+            aria-label="New file"
+            disabled={!createTarget}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => createTarget && beginCreate("file", createTarget)}
+          >
+            <NewFileIcon />
+          </button>
+          <button
+            className="tool-btn icon-btn small"
+            title={createTargetName ? `New folder in ${createTargetName}` : "New folder"}
+            aria-label="New folder"
+            disabled={!createTarget}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={() => createTarget && beginCreate("folder", createTarget)}
+          >
+            <NewFolderIcon />
+          </button>
           <button
             className="tool-btn icon-btn small"
             title="Collapse all folders"
@@ -295,7 +534,7 @@ export function ExplorerPanel() {
           </button>
         </div>
       </div>
-      <div className="panel-body">
+      <div className="panel-body" onContextMenu={onRootMenu}>
         {root ? (
           <DirChildren key={`${root}:${refreshKey}`} path={root} depth={0} ctx={ctx} />
         ) : (
@@ -308,6 +547,19 @@ export function ExplorerPanel() {
           y={menu.y}
           items={menuItems(menu)}
           onClose={() => setMenu(null)}
+        />
+      )}
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => {
+            confirm.run();
+            setConfirm(null);
+          }}
+          onCancel={() => setConfirm(null)}
         />
       )}
     </div>

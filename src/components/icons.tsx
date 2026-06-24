@@ -58,6 +58,21 @@ export const PlusIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const NewFileIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M7 2H3.4a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h5a.5.5 0 0 0 .5-.5V4Z" />
+    <path d="M7 2v2h2" />
+    <path d="M12 8.4v4M10 10.4h4" />
+  </svg>
+);
+
+export const NewFolderIcon = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)}>
+    <path d="M1.8 4.4c0-.5.4-1 1-1H6l1.4 1.5h5.8c.5 0 1 .4 1 1v5.4c0 .5-.5 1-1 1H2.8c-.6 0-1-.5-1-1V4.4Z" />
+    <path d="M8 6.9v4M6 8.9h4" />
+  </svg>
+);
+
 export const ExplorerIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base(p)}>
     <path d="M4.5 2.5h4.2L12 5.8V13a.5.5 0 0 1-.5.5h-7A.5.5 0 0 1 4 13V3a.5.5 0 0 1 .5-.5Z" />

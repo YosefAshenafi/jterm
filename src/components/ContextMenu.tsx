@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export interface MenuItem {
   label: string;
@@ -6,6 +7,8 @@ export interface MenuItem {
   disabled?: boolean;
   /** Render a divider above this item, grouping it apart from the previous one. */
   separator?: boolean;
+  /** Destructive action (e.g. Delete) — rendered in a warning colour. */
+  danger?: boolean;
 }
 
 interface Props {
@@ -40,7 +43,10 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
     };
   }, [onClose]);
 
-  return (
+  // Portal to <body> so the menu isn't trapped by a transformed ancestor (e.g.
+  // the peeked sidebar or the full-screen shell), which would otherwise make
+  // `position: fixed` resolve against that ancestor and offset it from the cursor.
+  return createPortal(
     <div
       ref={menuRef}
       className="context-menu"
@@ -51,7 +57,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
         <Fragment key={i}>
           {item.separator && i > 0 && <div className="context-separator" />}
           <button
-            className="context-item"
+            className={`context-item${item.danger ? " danger" : ""}`}
             disabled={item.disabled}
             onPointerDown={(e) => {
               if (e.button !== 0) return;
@@ -71,6 +77,7 @@ export function ContextMenu({ x, y, items, onClose }: Props) {
           </button>
         </Fragment>
       ))}
-    </div>
+    </div>,
+    document.body
   );
 }
