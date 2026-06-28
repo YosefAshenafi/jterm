@@ -171,7 +171,7 @@ pub fn process_cwd(pid: u32) -> Option<String> {
     sys.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
-        ProcessRefreshKind::new().with_cwd(UpdateKind::Always),
+        ProcessRefreshKind::nothing().with_cwd(UpdateKind::Always),
     );
     let cwd = sys.process(pid)?.cwd()?;
     Some(cwd.to_string_lossy().into_owned())
