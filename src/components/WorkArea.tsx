@@ -13,6 +13,7 @@ import { trackPointerDrag } from "../drag";
 import { basename, imageMime, resolveCwd } from "../workspace";
 import { highlightToHtml, languageFromName } from "./syntax";
 import { autoIndentOnEnter, detectIndentUnit } from "./indent";
+import { lineCopyText, deleteLines, pasteLineAbove } from "./lineEdit";
 import { renderMarkdown } from "./markdown";
 import { EyeIcon } from "./icons";
 import { isMac } from "../platform";
@@ -74,6 +75,9 @@ export function WorkArea() {
   const hintUrlRef = useRef<string | null>(null);
   const requested = useRef<Set<string>>(new Set());
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // The text last put on the clipboard by a whole-line copy/cut; a later paste
+  // that still sees this exact text lands it as a line (VS Code line-paste).
+  const lineClipboardRef = useRef<string | null>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const panelResize = useRef<(() => void) | null>(null);
@@ -282,30 +286,72 @@ export function WorkArea() {
     if (!mod) return;
     const k = e.key.toLowerCase();
 
+    // ⌘⇧K / Ctrl+Shift+K — delete the caret's line (or every line a selection
+    // spans), no clipboard, no need to highlight first.
+    if (k === "k" && e.shiftKey) {
+      e.preventDefault();
+      const { selectionStart: s, selectionEnd: en, value } = ta;
+      const { value: next, caret } = deleteLines(value, s, en);
+      if (next === value) return;
+      recordEdit(active.path, value, next);
+      store.setFileDraft(active.path, next);
+      requestAnimationFrame(() => (ta.selectionStart = ta.selectionEnd = caret));
+      return;
+    }
+
     if (k === "a") {
       e.preventDefault();
       ta.select();
     } else if (k === "c") {
       e.preventDefault();
-      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
-      if (sel) void clipboardWriteText(sel);
+      const { selectionStart: s, selectionEnd: en, value } = ta;
+      if (s !== en) {
+        lineClipboardRef.current = null;
+        void clipboardWriteText(value.slice(s, en));
+      } else {
+        // No selection: copy the whole caret line, remembering it as a line.
+        const text = lineCopyText(value, s, en);
+        lineClipboardRef.current = text;
+        void clipboardWriteText(text);
+      }
     } else if (k === "x") {
       e.preventDefault();
       const { selectionStart: s, selectionEnd: en, value } = ta;
-      if (s === en) return;
-      void clipboardWriteText(value.slice(s, en));
-      const next = value.slice(0, s) + value.slice(en);
-      recordEdit(active.path, value, next);
-      store.setFileDraft(active.path, next);
-      requestAnimationFrame(() => (ta.selectionStart = ta.selectionEnd = s));
+      if (s !== en) {
+        lineClipboardRef.current = null;
+        void clipboardWriteText(value.slice(s, en));
+        const next = value.slice(0, s) + value.slice(en);
+        recordEdit(active.path, value, next);
+        store.setFileDraft(active.path, next);
+        requestAnimationFrame(() => (ta.selectionStart = ta.selectionEnd = s));
+      } else {
+        // No selection: cut the whole caret line.
+        const text = lineCopyText(value, s, en);
+        lineClipboardRef.current = text;
+        void clipboardWriteText(text);
+        const { value: next, caret } = deleteLines(value, s, en);
+        recordEdit(active.path, value, next);
+        store.setFileDraft(active.path, next);
+        requestAnimationFrame(() => (ta.selectionStart = ta.selectionEnd = caret));
+      }
     } else if (k === "v") {
       e.preventDefault();
       const path = active.path;
+      const lineMark = lineClipboardRef.current;
       void clipboardReadText()
         .then((text) => {
           const cur = taRef.current;
           if (text == null || !cur) return;
           const { selectionStart: s, selectionEnd: en, value } = cur;
+          // A clipboard still holding our whole-line copy pastes as a line above
+          // the caret, regardless of the caret's column (VS Code line-paste).
+          if (s === en && text === lineMark && text.endsWith("\n")) {
+            const { value: next, caret } = pasteLineAbove(value, s, text);
+            recordEdit(path, value, next);
+            store.setFileDraft(path, next);
+            requestAnimationFrame(() => (cur.selectionStart = cur.selectionEnd = caret));
+            return;
+          }
           const next = value.slice(0, s) + text + value.slice(en);
           recordEdit(path, value, next);
           store.setFileDraft(path, next);
