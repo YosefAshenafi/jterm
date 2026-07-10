@@ -259,8 +259,7 @@ fn rename_path(path: &str, new_name: &str) -> Result<String, String> {
     if target == source {
         return Ok(path.to_string());
     }
-    if target.exists()
-        && std::fs::canonicalize(&target).ok() != std::fs::canonicalize(source).ok()
+    if target.exists() && std::fs::canonicalize(&target).ok() != std::fs::canonicalize(source).ok()
     {
         return Err(format!("“{name}” already exists"));
     }
