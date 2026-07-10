@@ -51,7 +51,18 @@ let fileClipboard: string[] = [];
  * more recent of the two wins. */
 let fileClipboardCount = -1;
 
+/** Path being dragged in the tree (HTML5 DataTransfer is unreliable in Tauri
+ * webviews, so we track it ourselves). */
+let dragSourcePath: string | null = null;
+
 const REVEAL_LABEL = isMac ? "Reveal in Finder" : "Reveal in File Explorer";
+
+/** Whether the pointer is over the Explorer. The tree never takes keyboard
+ * focus (clicking a row leaves the terminal focused), so hover is what decides
+ * whether the copy/paste chord targets the tree or the terminal. */
+export function explorerHovered(): boolean {
+  return !!document.querySelector(".explorer-panel:hover");
+}
 
 /** Mark a path for pasting and remember where the OS clipboard stood, so a later
  * Finder copy is recognised as newer. */
@@ -81,13 +92,21 @@ interface ExplorerCtx {
   selected: string | null;
   /** A pending inline create, rendered inside its `parentDir`. */
   creating: Creating | null;
+  /** Path of the entry being renamed in place, if any. */
+  renaming: string | null;
+  /** Path of a folder being hovered as a drag-and-drop target, or null. */
+  dropTarget: string | null;
+  moveEntries: (sources: string[], destDir: string) => void;
   toggle: (path: string) => void;
   onFile: (path: string) => void;
   onCd: (path: string) => void;
   onMenu: (e: React.MouseEvent, entry: Entry) => void;
   select: (entry: Entry) => void;
+  setDropTarget: (path: string | null) => void;
   submitCreate: (name: string) => void;
   cancelCreate: () => void;
+  submitRename: (name: string) => void;
+  cancelRename: () => void;
 }
 
 function indentStyle(depth: number) {
@@ -133,6 +152,74 @@ function CreateRow({
         spellCheck={false}
         autoComplete="off"
         placeholder={kind === "folder" ? "folder name" : "file name"}
+        onPointerDown={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") {
+            e.preventDefault();
+            finish(true);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            finish(false);
+          }
+        }}
+        onBlur={() => finish(true)}
+      />
+    </div>
+  );
+}
+
+/** The inline rename box shown in place of an entry's row. Pre-filled with the
+ * current name — stem selected so typing replaces the name but keeps the
+ * extension, like VS Code. Commits on Enter or blur, cancels on Escape. */
+function RenameRow({
+  entry,
+  depth,
+  open,
+  onSubmit,
+  onCancel,
+}: {
+  entry: Entry;
+  depth: number;
+  /** Whether a folder being renamed is currently expanded (keeps its chevron). */
+  open: boolean;
+  onSubmit: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  // Enter blurs the input, so guard against committing twice.
+  const done = useRef(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    const dot = entry.is_dir ? -1 : entry.name.lastIndexOf(".");
+    el.setSelectionRange(0, dot > 0 ? dot : entry.name.length);
+  }, [entry]);
+  const finish = (commit: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    if (commit) onSubmit(ref.current?.value ?? "");
+    else onCancel();
+  };
+  return (
+    <div className="tree-row tree-create-row" style={indentStyle(depth)}>
+      {entry.is_dir ? (
+        <ChevronIcon className={`tree-chevron${open ? " open" : ""}`} />
+      ) : (
+        <span className="tree-chevron-spacer" />
+      )}
+      {entry.is_dir ? (
+        <FolderIcon className="tree-icon folder" />
+      ) : (
+        <FileIcon className="tree-icon file" />
+      )}
+      <input
+        ref={ref}
+        className="tree-create-input"
+        spellCheck={false}
+        autoComplete="off"
+        defaultValue={entry.name}
         onPointerDown={(e) => e.stopPropagation()}
         onKeyDown={(e) => {
           e.stopPropagation();
@@ -207,19 +294,50 @@ function DirChildren({ path, depth, ctx }: { path: string; depth: number; ctx: E
 
 function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: ExplorerCtx }) {
   const selected = entry.path === ctx.selected;
+  const renaming = entry.path === ctx.renaming;
+  const isDropTarget = ctx.dropTarget === entry.path;
+
+  const handleDragStart = (e: React.DragEvent) => {
+    dragSourcePath = entry.path;
+    e.dataTransfer.setData("text/plain", entry.path);
+    e.dataTransfer.effectAllowed = "move";
+    // Required so the browser shows a drag image instead of a "no-drop" cursor.
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // Allow default on draggable rows so the browser can detect the drag gesture
+    // (preventDefault on pointerdown breaks HTML5 drag initiation).
+    if ((e.currentTarget as HTMLElement).draggable) return;
+    e.preventDefault();
+  };
+
   if (!entry.is_dir) {
+    if (renaming) {
+      return (
+        <RenameRow
+          entry={entry}
+          depth={depth}
+          open={false}
+          onSubmit={ctx.submitRename}
+          onCancel={ctx.cancelRename}
+        />
+      );
+    }
     const active = entry.path === ctx.activePath;
     return (
       <button
         className={`tree-row${selected ? " tree-row-selected" : ""}${active ? " tree-row-active" : ""}`}
         style={indentStyle(depth)}
         title={entry.path}
-        onPointerDown={(e) => e.preventDefault()}
+        draggable={!renaming}
+        onPointerDown={handlePointerDown}
         onClick={() => {
           ctx.select(entry);
           ctx.onFile(entry.path);
         }}
         onContextMenu={(e) => ctx.onMenu(e, entry)}
+        onDragStart={handleDragStart}
       >
         <span className="tree-chevron-spacer" />
         <FileIcon className="tree-icon file" />
@@ -231,22 +349,52 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
   const open = ctx.expanded.has(entry.path);
   return (
     <>
-      <button
-        className={`tree-row${selected ? " tree-row-selected" : ""}`}
-        style={indentStyle(depth)}
-        title={`${entry.path}  ·  double-click to cd`}
-        onPointerDown={(e) => e.preventDefault()}
-        onClick={() => {
-          ctx.select(entry);
-          ctx.toggle(entry.path);
-        }}
-        onDoubleClick={() => ctx.onCd(entry.path)}
-        onContextMenu={(e) => ctx.onMenu(e, entry)}
-      >
-        <ChevronIcon className={`tree-chevron${open ? " open" : ""}`} />
-        <FolderIcon className="tree-icon folder" />
-        <span className="tree-label">{entry.name}</span>
-      </button>
+      {renaming ? (
+        <RenameRow
+          entry={entry}
+          depth={depth}
+          open={open}
+          onSubmit={ctx.submitRename}
+          onCancel={ctx.cancelRename}
+        />
+      ) : (
+        <button
+          className={`tree-row${selected ? " tree-row-selected" : ""}${isDropTarget ? " tree-drop-target" : ""}`}
+          style={indentStyle(depth)}
+          title={`${entry.path}  ·  double-click to cd`}
+          draggable={!renaming}
+          onPointerDown={handlePointerDown}
+          onClick={() => {
+            ctx.select(entry);
+            ctx.toggle(entry.path);
+          }}
+          onDoubleClick={() => ctx.onCd(entry.path)}
+          onContextMenu={(e) => ctx.onMenu(e, entry)}
+          onDragStart={handleDragStart}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; }}
+          onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = "move"; ctx.setDropTarget(entry.path); }}
+          onDragLeave={(e) => {
+            e.stopPropagation();
+            if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+              ctx.setDropTarget(null);
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            ctx.setDropTarget(null);
+            const src = dragSourcePath;
+            dragSourcePath = null;
+            if (src && src !== entry.path) {
+              void ctx.moveEntries([src], entry.path);
+            }
+          }}
+        >
+          <ChevronIcon className={`tree-chevron${open ? " open" : ""}`} />
+          <FolderIcon className="tree-icon folder" />
+          <span className="tree-label">{entry.name}</span>
+        </button>
+      )}
       {open && <DirChildren path={entry.path} depth={depth + 1} ctx={ctx} />}
     </>
   );
@@ -255,7 +403,16 @@ function EntryRow({ entry, depth, ctx }: { entry: Entry; depth: number; ctx: Exp
 /** File-tree view: click a file to open it, double-click a folder to `cd`,
  * single-click a folder to expand/collapse. "Collapse all" folds every folder. */
 export function ExplorerPanel() {
-  const { projectRoot, activePaneId, openFile, requestCloseFile, editor, showToast } = useStore();
+  const {
+    projectRoot,
+    activePaneId,
+    activePanelTerminal,
+    openFile,
+    requestCloseFile,
+    renameOpenFiles,
+    editor,
+    showToast,
+  } = useStore();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [refreshKey, setRefreshKey] = useState(0);
   const [menu, setMenu] = useState<{
@@ -268,6 +425,8 @@ export function ExplorerPanel() {
   const [fallbackRoot, setFallbackRoot] = useState<string | null>(null);
   const [selected, setSelected] = useState<Entry | null>(null);
   const [creating, setCreating] = useState<Creating | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{
     title: string;
     message: string;
@@ -357,11 +516,70 @@ export function ExplorerPanel() {
     }
   };
 
+  /** Rename the entry on disk, then re-key everything that referenced the old
+   * path — expanded folders, the selection, and open editor tabs. */
+  const submitRename = async (rawName: string) => {
+    const path = renaming;
+    setRenaming(null);
+    if (!path) return;
+    const name = rawName.trim();
+    const oldName = basename(path);
+    if (!name || name === oldName) return;
+    try {
+      const newPath = await invoke<string>("rename_entry", { path, newName: name });
+      const remap = (p: string) =>
+        p === path || p.startsWith(path + "/") || p.startsWith(path + "\\")
+          ? newPath + p.slice(path.length)
+          : p;
+      setExpanded((prev) => new Set([...prev].map(remap)));
+      setSelected((s) => {
+        if (!s) return s;
+        const p = remap(s.path);
+        return p === s.path ? s : { ...s, path: p, name: basename(p) };
+      });
+      renameOpenFiles(path, newPath);
+      setRefreshKey((k) => k + 1);
+      showToast(`Renamed ${oldName} to ${basename(newPath)}`);
+    } catch (err) {
+      showToast(`Rename failed: ${err}`);
+    }
+  };
+
+  /** Copy `sources` into `destDir`, then refresh the tree so they appear. */
+  const doPaste = async (sources: string[], destDir: string) => {
+    try {
+      const created = await invoke<string[]>("copy_entries", { sources, destDir });
+      setExpanded((prev) => new Set(prev).add(destDir));
+      setRefreshKey((k) => k + 1);
+      const n = created.length;
+      showToast(`Pasted ${n} item${n === 1 ? "" : "s"} into ${basename(destDir)}`);
+    } catch (err) {
+      showToast(`Paste failed: ${err}`);
+    }
+  };
+
+  /** Move `sources` into `destDir` (drag-and-drop). */
+  const doMove = async (sources: string[], destDir: string) => {
+    try {
+      const moved = await invoke<string[]>("move_entries", { sources, destDir });
+      setExpanded((prev) => new Set(prev).add(destDir));
+      setRefreshKey((k) => k + 1);
+      const n = moved.length;
+      showToast(`Moved ${n} item${n === 1 ? "" : "s"} to ${basename(destDir)}`);
+    } catch (err) {
+      showToast(`Move failed: ${err}`);
+    }
+  };
+
   const ctx: ExplorerCtx = {
     expanded,
     activePath,
     selected: selected?.path ?? null,
     creating,
+    renaming,
+    dropTarget,
+    setDropTarget,
+    moveEntries: doMove,
     toggle: (path) =>
       setExpanded((prev) => {
         const next = new Set(prev);
@@ -382,6 +600,8 @@ export function ExplorerPanel() {
     select: (entry) => setSelected(entry),
     submitCreate,
     cancelCreate: () => setCreating(null),
+    submitRename,
+    cancelRename: () => setRenaming(null),
   };
 
   /** Right-clicking the explorer background (or the header title) targets the
@@ -389,19 +609,6 @@ export function ExplorerPanel() {
   const onRootMenu = (e: React.MouseEvent) => {
     if (!root) return;
     ctx.onMenu(e, { name: basename(root), path: root, is_dir: true });
-  };
-
-  /** Copy `sources` into `destDir`, then refresh the tree so they appear. */
-  const doPaste = async (sources: string[], destDir: string) => {
-    try {
-      const created = await invoke<string[]>("copy_entries", { sources, destDir });
-      setExpanded((prev) => new Set(prev).add(destDir));
-      setRefreshKey((k) => k + 1);
-      const n = created.length;
-      showToast(`Pasted ${n} item${n === 1 ? "" : "s"} into ${basename(destDir)}`);
-    } catch (err) {
-      showToast(`Paste failed: ${err}`);
-    }
   };
 
   /** Delete `entry` from disk, closing any open editor tab it covered, then
@@ -467,12 +674,10 @@ export function ExplorerPanel() {
       }
     );
     if (!isRoot) {
-      items.push({
-        label: "Delete",
-        separator: true,
-        danger: true,
-        onClick: () => requestDelete(entry),
-      });
+      items.push(
+        { label: "Rename…", separator: true, onClick: () => setRenaming(entry.path) },
+        { label: "Delete", danger: true, onClick: () => requestDelete(entry) }
+      );
     }
     return items;
   };
@@ -482,8 +687,73 @@ export function ExplorerPanel() {
   const createTarget = selected ? createDirFor(selected) : root;
   const createTargetName = createTarget ? basename(createTarget) : null;
 
+  // ⌘C / ⌘V while the pointer is over the Explorer: copy the selected entry,
+  // paste into `createTarget` — same sources and destination rules as the
+  // context menu, including files copied in Finder. Kept in a ref so the
+  // window listener registers once but always sees the latest state.
+  const hotkey = useRef<(e: KeyboardEvent) => void>(() => {});
+  hotkey.current = (e) => {
+    const t = e.target as HTMLElement | null;
+    // Typing in the editor or a text field keeps its native copy/paste.
+    const inTerminal = !!t?.closest(".terminal-host");
+    if (!inTerminal && (t?.tagName === "INPUT" || t?.tagName === "TEXTAREA")) return;
+    // Delete / Backspace while the pointer is over the explorer: delete selected.
+    if ((e.key === "Backspace" || e.key === "Delete") && explorerHovered()) {
+      if (!selected) return;
+      e.preventDefault();
+      requestDelete(selected);
+      return;
+    }
+    const mod = isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey;
+    if (!mod) return;
+    const k = e.key.toLowerCase();
+    if ((k !== "c" && k !== "v") || !explorerHovered()) return;
+    if (k === "c") {
+      // Selected text — in the terminal or elsewhere — outranks the tree.
+      const termId = t?.closest(".term-panel") ? activePanelTerminal : activePaneId;
+      if (termId && terminals.getSelection(termId)) return;
+      if (window.getSelection()?.toString()) return;
+      if (!selected) return;
+      e.preventDefault();
+      const { name, path } = selected;
+      void copyEntry(path).then(() => showToast(`Copied ${name}`));
+    } else if (createTarget) {
+      e.preventDefault();
+      const dest = createTarget;
+      void resolvePasteSources().then((sources) => {
+        if (sources.length) void doPaste(sources, dest);
+        else showToast("Nothing to paste");
+      });
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => hotkey.current(e);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+
+  // Toggle a body class during file drags so the cursor becomes a move/copy
+  // pointer everywhere, not just over the tree rows.
+  useEffect(() => {
+    const onStart = () => {
+      if (!dragSourcePath) return;
+      document.body.classList.add("file-dragging");
+    };
+    const onEnd = () => {
+      dragSourcePath = null;
+      document.body.classList.remove("file-dragging");
+    };
+    window.addEventListener("dragstart", onStart, true);
+    window.addEventListener("dragend", onEnd, true);
+    return () => {
+      window.removeEventListener("dragstart", onStart, true);
+      window.removeEventListener("dragend", onEnd, true);
+      document.body.classList.remove("file-dragging");
+    };
+  }, []);
+
   return (
-    <div className="panel">
+    <div className="panel explorer-panel">
       <div className="panel-header">
         <span
           className="panel-title"
@@ -534,7 +804,21 @@ export function ExplorerPanel() {
           </button>
         </div>
       </div>
-      <div className="panel-body" onContextMenu={onRootMenu}>
+      <div
+        className="panel-body"
+        onContextMenu={onRootMenu}
+        onDragOver={(e) => { if (root) { e.preventDefault(); } }}
+        onDrop={(e) => {
+          if (!root) return;
+          e.preventDefault();
+          setDropTarget(null);
+          const src = dragSourcePath;
+          dragSourcePath = null;
+          if (src && src !== root) {
+            void doMove([src], root);
+          }
+        }}
+      >
         {root ? (
           <DirChildren key={`${root}:${refreshKey}`} path={root} depth={0} ctx={ctx} />
         ) : (

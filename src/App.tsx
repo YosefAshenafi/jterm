@@ -13,6 +13,7 @@ import { Toolbar } from "./components/Toolbar";
 import { Sidebar } from "./components/Sidebar";
 import { WorkArea } from "./components/WorkArea";
 import { CommandPalette } from "./components/CommandPalette";
+import { explorerHovered } from "./components/ExplorerPanel";
 import { isMac } from "./platform";
 
 type TextField = HTMLInputElement | HTMLTextAreaElement;
@@ -179,6 +180,9 @@ export default function App() {
       const focusedTerminal = () =>
         el?.closest(".term-panel") ? store.activePanelTerminal : activePaneId();
       if (k === "v") {
+        // Pointing at the Explorer, paste means files into the tree (handled
+        // by ExplorerPanel's own listener), not text into the terminal.
+        if (explorerHovered()) return;
         const id = focusedTerminal();
         if (id) return run(() => terminals.paste(id));
       }

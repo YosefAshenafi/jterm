@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **⌘C / ⌘V in the Explorer**: point at the file tree and press ⌘V
+  (`Ctrl+Shift+V` on Windows/Linux) to paste into the selected folder — or a
+  selected file's folder, or the project root — and ⌘C to copy the selected
+  file or folder. Uses the same rules as the context menu's Copy/Paste, so
+  files copied in Finder paste in too.
 - **Copy & paste files in the Explorer**: right-click a file or folder to copy
   it, then paste into any folder (onto a folder drops files inside it; onto a
   file, into its folder). Files copied in Finder paste in too, and the more

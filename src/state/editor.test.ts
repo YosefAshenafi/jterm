@@ -82,6 +82,31 @@ describe("select / close", () => {
   });
 });
 
+describe("rename-path", () => {
+  it("re-keys the renamed file and keeps its dirty draft", () => {
+    let s = open(emptyEditor, "/dir/a.ts");
+    s = editorReducer(s, { type: "loaded", path: "/dir/a.ts", text: "v1" });
+    s = editorReducer(s, { type: "edit", path: "/dir/a.ts", draft: "v2" });
+    s = editorReducer(s, { type: "rename-path", from: "/dir/a.ts", to: "/dir/b.ts" });
+    expect(s.files[0]).toMatchObject({ path: "/dir/b.ts", name: "b.ts", draft: "v2" });
+    expect(s.activePath).toBe("/dir/b.ts");
+    expect(isDirty(s.files[0])).toBe(true);
+  });
+
+  it("a folder rename re-keys children but not similarly-prefixed siblings", () => {
+    let s = open(open(emptyEditor, "/dir/a.ts"), "/dirty/b.ts");
+    s = editorReducer(s, { type: "rename-path", from: "/dir", to: "/renamed" });
+    expect(s.files.map((f) => f.path)).toEqual(["/renamed/a.ts", "/dirty/b.ts"]);
+    expect(s.files[0].name).toBe("a.ts");
+    expect(s.activePath).toBe("/dirty/b.ts");
+  });
+
+  it("returns the same reference when nothing matches", () => {
+    const s = open(emptyEditor, "/a.ts");
+    expect(editorReducer(s, { type: "rename-path", from: "/b.ts", to: "/c.ts" })).toBe(s);
+  });
+});
+
 describe("per-tab editor map", () => {
   const openIn = (m: EditorMap, tabId: string, path: string) =>
     editorMapReducer(m, { type: "open", tabId, path, name: path.split("/").pop()! });

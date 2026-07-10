@@ -404,6 +404,8 @@ interface StoreApi {
   markFileLoaded(path: string, text: string): void;
   markFileImage(path: string, src: string): void;
   markFileError(path: string, error: string): void;
+  /** Re-key open buffers after a rename on disk (folder renames re-key children). */
+  renameOpenFiles(from: string, to: string): void;
   saveFile(path: string): Promise<void>;
   saveActiveFile(): Promise<void>;
   requestCloseFile(path: string): Promise<void>;
@@ -711,6 +713,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       markFileLoaded: (path, text) => editorDispatch({ type: "loaded", path, text }),
       markFileImage: (path, src) => editorDispatch({ type: "image-loaded", path, src }),
       markFileError: (path, error) => editorDispatch({ type: "error", path, error }),
+      renameOpenFiles: (from, to) => editorDispatch({ type: "rename-path", from, to }),
       saveFile: async (path) => {
         const f = editor.files.find((x) => x.path === path);
         if (!f || f.saved === null || !isDirty(f)) return;

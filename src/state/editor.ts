@@ -32,6 +32,7 @@ export type EditorAction =
   | { type: "saved"; path: string; text: string }
   | { type: "error"; path: string; error: string }
   | { type: "select"; path: string }
+  | { type: "rename-path"; from: string; to: string }
   | { type: "close"; path: string }
   | { type: "show-terminal" };
 
@@ -113,6 +114,25 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       return state.files.some((f) => f.path === action.path)
         ? { ...state, activePath: action.path }
         : state;
+    case "rename-path": {
+      // Re-key buffers under a renamed file/folder so tabs — dirty drafts
+      // included — survive an explorer rename instead of pointing at a path
+      // that no longer exists. A folder rename re-keys everything inside it.
+      const remap = (p: string) =>
+        p === action.from || p.startsWith(action.from + "/") || p.startsWith(action.from + "\\")
+          ? action.to + p.slice(action.from.length)
+          : p;
+      let changed = false;
+      const files = state.files.map((f) => {
+        const path = remap(f.path);
+        if (path === f.path) return f;
+        changed = true;
+        return { ...f, path, name: path.split(/[\\/]/).pop() ?? path };
+      });
+      if (!changed) return state;
+      const activePath = state.activePath === null ? null : remap(state.activePath);
+      return { files, activePath };
+    }
     case "show-terminal":
       return state.activePath === null ? state : { ...state, activePath: null };
     case "close": {

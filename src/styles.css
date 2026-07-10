@@ -933,6 +933,18 @@ body {
 .tree-row-active .tree-icon.file {
   color: var(--accent);
 }
+/* Drag-and-drop target highlight for folders. */
+.tree-drop-target {
+  background: #2a3b4a;
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+  border-radius: 4px;
+}
+/* Cursor feedback while a file/folder is being dragged. */
+body.file-dragging,
+body.file-dragging * {
+  cursor: copy !important;
+  user-select: none !important;
+}
 .tree-label {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -236,6 +236,45 @@ async fn delete_entry(path: String) -> Result<(), String> {
     .await
 }
 
+/// Rename a file or directory in place to `new_name`, returning the new path.
+/// The name must be a single path segment — Rename never moves an entry.
+/// Refuses to clobber a different existing entry, but allows case-only renames
+/// (on macOS's case-insensitive filesystem the target "exists" — it's the
+/// source itself, which canonical paths tell apart from a real collision).
+fn rename_path(path: &str, new_name: &str) -> Result<String, String> {
+    let source = std::path::Path::new(path);
+    let name = new_name.trim();
+    if name.is_empty() {
+        return Err("Name can't be empty".into());
+    }
+    if name.contains(['/', '\\']) || name == "." || name == ".." {
+        return Err(format!("“{name}” is not a valid name"));
+    }
+    std::fs::symlink_metadata(source).map_err(|e| e.to_string())?;
+    let target = source
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .ok_or("Can't rename the filesystem root")?
+        .join(name);
+    if target == source {
+        return Ok(path.to_string());
+    }
+    if target.exists()
+        && std::fs::canonicalize(&target).ok() != std::fs::canonicalize(source).ok()
+    {
+        return Err(format!("“{name}” already exists"));
+    }
+    std::fs::rename(source, &target).map_err(|e| e.to_string())?;
+    Ok(target.to_string_lossy().into_owned())
+}
+
+/// Rename a file or directory in place (same parent, new name), returning the
+/// new path. Backs the explorer's Rename action.
+#[tauri::command]
+async fn rename_entry(path: String, new_name: String) -> Result<String, String> {
+    blocking(move || rename_path(&path, &new_name)).await
+}
+
 /// The final path segment for an error message, falling back to the raw input.
 fn display_name(target: &std::path::Path, raw: &str) -> String {
     target
@@ -332,6 +371,51 @@ async fn copy_entries(sources: Vec<String>, dest_dir: String) -> Result<Vec<Stri
             created.push(target.to_string_lossy().into_owned());
         }
         Ok(created)
+    })
+    .await
+}
+
+/// Move files and/or folders into `dest_dir`, returning the new paths. Backs the
+/// explorer's drag-and-drop: `rename` on the same filesystem (fast), falling back
+/// to copy+delete for cross-device moves. Refuses to move into itself.
+#[tauri::command]
+async fn move_entries(sources: Vec<String>, dest_dir: String) -> Result<Vec<String>, String> {
+    blocking(move || {
+        let dest = std::path::Path::new(&dest_dir);
+        if !dest.is_dir() {
+            return Err("Destination is not a folder".into());
+        }
+        let canon_dest = std::fs::canonicalize(dest).map_err(|e| e.to_string())?;
+        let mut moved = Vec::new();
+        for src in &sources {
+            let src_path = std::path::Path::new(src);
+            let meta = std::fs::symlink_metadata(src_path).map_err(|e| format!("{src}: {e}"))?;
+            let name = src_path
+                .file_name()
+                .ok_or_else(|| format!("Invalid path: {src}"))?;
+            if meta.is_dir() {
+                let canon_src = std::fs::canonicalize(src_path).map_err(|e| e.to_string())?;
+                if canon_dest == canon_src || canon_dest.starts_with(&canon_src) {
+                    return Err(format!(
+                        "Can't move “{}” into itself",
+                        name.to_string_lossy()
+                    ));
+                }
+            }
+            let target = unique_target(dest, name);
+            if std::fs::rename(src_path, &target).is_err() {
+                // Cross-device move: fall back to copy + delete.
+                if meta.is_dir() {
+                    copy_dir_recursive(src_path, &target)?;
+                    std::fs::remove_dir_all(src_path).map_err(|e| e.to_string())?;
+                } else {
+                    std::fs::copy(src_path, &target).map_err(|e| format!("{src}: {e}"))?;
+                    std::fs::remove_file(src_path).map_err(|e| e.to_string())?;
+                }
+            }
+            moved.push(target.to_string_lossy().into_owned());
+        }
+        Ok(moved)
     })
     .await
 }
@@ -1173,7 +1257,9 @@ pub fn run() {
             create_file,
             create_dir,
             delete_entry,
+            rename_entry,
             copy_entries,
+            move_entries,
             pane_cwd,
             save_clipboard_image,
             clipboard_file_paths,
@@ -1326,6 +1412,52 @@ mod tests {
             unique_target(&dir, OsStr::new("README")),
             dir.join("README copy")
         );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn rename_path_renames_files_and_folders() {
+        let dir = scratch("rename-basic");
+        std::fs::write(dir.join("a.txt"), b"x").unwrap();
+        let new = rename_path(&dir.join("a.txt").to_string_lossy(), "b.txt").unwrap();
+        assert_eq!(new, dir.join("b.txt").to_string_lossy());
+        assert!(!dir.join("a.txt").exists());
+        assert_eq!(std::fs::read_to_string(dir.join("b.txt")).unwrap(), "x");
+
+        std::fs::create_dir(dir.join("sub")).unwrap();
+        std::fs::write(dir.join("sub").join("inner.txt"), b"y").unwrap();
+        let new = rename_path(&dir.join("sub").to_string_lossy(), "renamed").unwrap();
+        assert_eq!(new, dir.join("renamed").to_string_lossy());
+        assert!(std::path::Path::new(&new).join("inner.txt").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn rename_path_same_name_is_a_no_op_and_case_only_renames_work() {
+        let dir = scratch("rename-case");
+        std::fs::write(dir.join("a.txt"), b"x").unwrap();
+        let a = dir.join("a.txt").to_string_lossy().into_owned();
+        assert_eq!(rename_path(&a, "a.txt").unwrap(), a);
+        let new = rename_path(&a, "A.txt").unwrap();
+        assert_eq!(new, dir.join("A.txt").to_string_lossy());
+        assert_eq!(std::fs::read_to_string(dir.join("A.txt")).unwrap(), "x");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn rename_path_refuses_collisions_and_bad_names() {
+        let dir = scratch("rename-guard");
+        std::fs::write(dir.join("a.txt"), b"a").unwrap();
+        std::fs::write(dir.join("b.txt"), b"b").unwrap();
+        let a = dir.join("a.txt").to_string_lossy().into_owned();
+        assert!(rename_path(&a, "b.txt").is_err());
+        assert!(rename_path(&a, "").is_err());
+        assert!(rename_path(&a, "  ").is_err());
+        assert!(rename_path(&a, "x/y.txt").is_err());
+        assert!(rename_path(&a, "..").is_err());
+        assert!(rename_path(&dir.join("missing.txt").to_string_lossy(), "c.txt").is_err());
+        assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), "a");
+        assert_eq!(std::fs::read_to_string(dir.join("b.txt")).unwrap(), "b");
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
