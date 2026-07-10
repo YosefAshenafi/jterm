@@ -105,10 +105,21 @@ export function WorkArea() {
   const editorLine = Math.round(editorFont * 1.45);
 
   const activeTab = state.tabs.find((t) => t.id === state.activeTabId);
+  const activeTabId = state.activeTabId;
   const hasFiles = editor.files.length > 0;
   const showTerminal = editor.activePath === null;
   const active = editor.files.find((f) => f.path === editor.activePath) ?? null;
   const editing = active && !active.loading && active.saved !== null && !active.image;
+
+  // WorkArea-local caches (fetch guard, undo history, scroll memory) belong to
+  // one tab's buffer: keyed by tab + path so two project tabs never share or
+  // clobber each other's state, even with the same file open in both.
+  const bufKey = (path: string) => `${activeTabId}\x00${path}`;
+  const staleBufKey = (key: string, live: Set<string>) => {
+    const tabId = key.slice(0, key.indexOf("\x00"));
+    if (!state.tabs.some((t) => t.id === tabId)) return true;
+    return tabId === activeTabId && !live.has(key);
+  };
 
   const isMarkdownFile = (name: string) => /\.(md|markdown|mdown|mkd|mkdn)$/i.test(name);
   const [previewPaths, setPreviewPaths] = useState<Set<string>>(() => new Set());
@@ -124,8 +135,8 @@ export function WorkArea() {
 
   useEffect(() => {
     editor.files.forEach((f) => {
-      if (f.loading && !requested.current.has(f.path)) {
-        requested.current.add(f.path);
+      if (f.loading && !requested.current.has(bufKey(f.path))) {
+        requested.current.add(bufKey(f.path));
         const mime = imageMime(f.path);
         if (mime) {
           invoke<string>("read_file_base64", { path: f.path })
@@ -138,18 +149,36 @@ export function WorkArea() {
         }
       }
     });
-    const live = new Set(editor.files.map((f) => f.path));
-    requested.current.forEach((p) => {
-      if (!live.has(p)) requested.current.delete(p);
+    // Prune only this tab's closed buffers and dead tabs — never another tab's
+    // live entries, or a tab switch would wipe its undo history.
+    const live = new Set(editor.files.map((f) => bufKey(f.path)));
+    requested.current.forEach((k) => {
+      if (staleBufKey(k, live)) requested.current.delete(k);
     });
-    history.current.forEach((_, p) => {
-      if (!live.has(p)) history.current.delete(p);
+    history.current.forEach((_, k) => {
+      if (staleBufKey(k, live)) history.current.delete(k);
     });
-  }, [editor.files, store]);
+    scrollMem.current.forEach((_, k) => {
+      if (staleBufKey(k, live)) scrollMem.current.delete(k);
+    });
+  }, [editor.files, state.tabs, activeTabId, store]);
 
   useEffect(() => {
     if (editing && store.focusRegion === "editor") taRef.current?.focus();
   }, [editor.activePath, editing, store.focusRegion]);
+
+  // The one textarea is reused across buffers and tab switches: restore the
+  // shown buffer's own scroll offset so the previous buffer's position never
+  // bleeds through. Declared before the reveal effect so a go-to-line wins.
+  useEffect(() => {
+    if (!editing) return;
+    const ta = taRef.current;
+    if (!ta) return;
+    const mem = editor.activePath ? scrollMem.current.get(bufKey(editor.activePath)) : undefined;
+    ta.scrollTop = mem?.top ?? 0;
+    ta.scrollLeft = mem?.left ?? 0;
+    syncScroll();
+  }, [activeTabId, editor.activePath, editing]);
 
   useEffect(() => {
     const onKeyUp = (e: KeyboardEvent) => {
@@ -195,6 +224,12 @@ export function WorkArea() {
   const syncScroll = () => {
     const ta = taRef.current;
     if (!ta) return;
+    if (editor.activePath) {
+      scrollMem.current.set(bufKey(editor.activePath), {
+        top: ta.scrollTop,
+        left: ta.scrollLeft,
+      });
+    }
     if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop;
     if (preRef.current) {
       preRef.current.scrollTop = ta.scrollTop;
@@ -205,12 +240,14 @@ export function WorkArea() {
   const history = useRef<Map<string, { stack: string[]; index: number; t: number }>>(
     new Map()
   );
+  /** Last scroll offset per tab+buffer, restored when that buffer is shown again. */
+  const scrollMem = useRef<Map<string, { top: number; left: number }>>(new Map());
 
   const recordEdit = (path: string, prev: string, next: string) => {
-    let h = history.current.get(path);
+    let h = history.current.get(bufKey(path));
     if (!h) {
       h = { stack: [prev], index: 0, t: 0 };
-      history.current.set(path, h);
+      history.current.set(bufKey(path), h);
     }
     if (h.index < h.stack.length - 1) h.stack.length = h.index + 1;
     const now = Date.now();
@@ -229,7 +266,7 @@ export function WorkArea() {
 
   const applyHistory = (delta: number) => {
     if (!active) return;
-    const h = history.current.get(active.path);
+    const h = history.current.get(bufKey(active.path));
     if (!h) return;
     const idx = h.index + delta;
     if (idx < 0 || idx >= h.stack.length) return;

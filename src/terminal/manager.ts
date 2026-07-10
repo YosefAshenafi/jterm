@@ -159,9 +159,16 @@ class TerminalManager {
     return pane;
   }
 
-  /** Attach the pane's terminal element into `container` (idempotent). */
+  /** Attach the pane's terminal element into `container` (idempotent). A mount
+   * hosts exactly one terminal: any other pane's element found in the container
+   * is evicted, so a reused mount can never keep showing a previous pane. */
   attach(paneId: string, container: HTMLElement): void {
     const pane = this.ensure(paneId);
+    for (const child of Array.from(container.children)) {
+      if (child !== pane.element && child.classList.contains("terminal-host")) {
+        child.remove();
+      }
+    }
     if (pane.element.parentElement !== container) container.appendChild(pane.element);
     this.fit(paneId);
   }

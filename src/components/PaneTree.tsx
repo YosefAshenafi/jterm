@@ -42,7 +42,10 @@ function PaneLeaf({
   const { focusPane, closePane, toggleZoom, setTitle } = useStore();
   const firstPaneId = firstLeaf(tab.root).id;
   return (
+    // Keyed by pane: switching tabs must remount the pane host, or the reused
+    // instance keeps the previous pane's mount element, cwd label and title state.
     <TerminalPane
+      key={paneId}
       paneId={paneId}
       active={tab.activePaneId === paneId}
       zoomed={tab.zoomedPaneId === paneId}
