@@ -33,10 +33,12 @@ import {
 import { DropTarget, DropZone } from "./paneDnd";
 import {
   EditorAction,
+  EditorMap,
   editorMapReducer,
   EditorState,
   emptyEditor,
   isDirty,
+  restoredBuffer,
 } from "./editor";
 import { basename, resolveCwd } from "../workspace";
 import { homeDir } from "@tauri-apps/api/path";
@@ -71,19 +73,70 @@ function loadSidebarWidth(): number {
   return v >= SIDEBAR_MIN && v <= SIDEBAR_MAX ? v : 272;
 }
 
+/** Largest unsaved draft (in chars) carried into the snapshot; bigger buffers
+ * restore from disk instead so the snapshot stays within localStorage quota. */
+const MAX_SNAPSHOT_DRAFT = 400_000;
+
+interface FileSnapshot {
+  path: string;
+  /** Present only when the buffer had unsaved changes small enough to keep. */
+  draft?: string;
+}
+
 interface TabSnapshot {
   title: string;
   titleManual?: boolean;
+  /** Files that were open in this tab's editor, in tab-strip order. */
+  files?: FileSnapshot[];
+  /** File the tab was showing; null/absent = the terminal view. */
+  activePath?: string | null;
+  /** Shell working directory, so a restored tab's terminal starts there. */
+  cwd?: string;
 }
 
-function saveSnapshot(tabs: Tab[], activeTabId: string): void {
+function saveSnapshot(
+  tabs: Tab[],
+  activeTabId: string,
+  editors: EditorMap,
+  cwds: Record<string, string>
+): void {
   const data = {
-    tabs: tabs.map((t) => ({ title: t.title, titleManual: t.titleManual })),
+    tabs: tabs.map((t): TabSnapshot => {
+      const ed = editors[t.id];
+      // Diff views are transient (their content isn't a file on disk), so
+      // they don't survive a restart.
+      const files = (ed?.files ?? [])
+        .filter((f) => !f.diff)
+        .map((f): FileSnapshot => {
+          const draft = isDirty(f) ? f.draft : f.pendingDraft;
+          return draft != null && draft.length <= MAX_SNAPSHOT_DRAFT
+            ? { path: f.path, draft }
+            : { path: f.path };
+        });
+      const activePath =
+        ed && files.some((f) => f.path === ed.activePath) ? ed.activePath : null;
+      return {
+        title: t.title,
+        titleManual: t.titleManual,
+        files,
+        activePath,
+        cwd: cwds[t.id],
+      };
+    }),
     activeIndex: tabs.findIndex((t) => t.id === activeTabId),
   };
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(data));
-  } catch { }
+  } catch {
+    // Likely over quota: drop the drafts (paths still restore) and retry.
+    try {
+      data.tabs = data.tabs.map((t) => ({
+        ...t,
+        files: t.files?.map((f) => ({ path: f.path })),
+      }));
+      localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(data));
+    } catch { }
+  }
 }
 
 function loadSnapshot(): { tabs: TabSnapshot[]; activeIndex: number } | null {
@@ -101,20 +154,51 @@ function makeTab(): Tab {
   return { id: newId("tab"), title: "Terminal", root: leaf, activePaneId: leaf.id };
 }
 
-function initialState(): AppState {
-  const snap = loadSnapshot();
-  if (snap && snap.tabs.length > 0) {
-    const tabs = snap.tabs.map((s) => {
-      const t = makeTab();
-      t.title = s.title;
-      t.titleManual = s.titleManual ?? false;
-      return t;
-    });
-    const idx = Math.min(snap.activeIndex, tabs.length - 1);
-    return { tabs, activeTabId: tabs[idx].id };
-  }
+function freshState(): AppState {
   const tab = makeTab();
   return { tabs: [tab], activeTabId: tab.id };
+}
+
+interface RestoredSession {
+  app: AppState;
+  editors: EditorMap;
+  /** Last known shell cwd per (new) tab id, seeding the sidebar project root. */
+  cwds: Record<string, string>;
+}
+
+/** Rebuild tabs, their open files and terminal start directories from the
+ * previous run's snapshot. File contents are re-read from disk the first time
+ * each tab is shown; dirty drafts are re-applied on top (see `restoredBuffer`). */
+function restoreSession(): RestoredSession {
+  const snap = loadSnapshot();
+  if (!snap || !Array.isArray(snap.tabs) || snap.tabs.length === 0) {
+    return { app: freshState(), editors: {}, cwds: {} };
+  }
+  const editors: EditorMap = {};
+  const cwds: Record<string, string> = {};
+  const tabs = snap.tabs.map((s) => {
+    const t = makeTab();
+    t.title = s.title;
+    t.titleManual = s.titleManual ?? false;
+    if (s.cwd) {
+      cwds[t.id] = s.cwd;
+      terminals.setSpawnCwd(t.activePaneId, Promise.resolve(s.cwd));
+    }
+    const files = (s.files ?? [])
+      .filter((f) => typeof f?.path === "string")
+      .map((f) => restoredBuffer(f.path, basename(f.path), f.draft));
+    if (files.length > 0) {
+      editors[t.id] = {
+        files,
+        activePath: files.some((f) => f.path === s.activePath)
+          ? (s.activePath as string)
+          : null,
+      };
+    }
+    return t;
+  });
+  const idx = Math.min(Math.max(snap.activeIndex ?? 0, 0), tabs.length - 1);
+  return { app: { tabs, activeTabId: tabs[idx].id }, editors, cwds };
 }
 
 type Action =
@@ -171,7 +255,7 @@ function closeTab(s: AppState, tabId: string): AppState {
   if (index === -1) return s;
   const tabs = s.tabs.filter((t) => t.id !== tabId);
   if (tabs.length === 0) {
-    return initialState();
+    return freshState();
   }
   let activeTabId = s.activeTabId;
   if (activeTabId === tabId) {
@@ -415,16 +499,22 @@ interface StoreApi {
 const StoreContext = createContext<StoreApi | null>(null);
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, undefined, initialState);
+  // The previous run's session (tabs, open files, shell cwds), restored once.
+  const [initial] = useState(restoreSession);
+  const [state, dispatch] = useReducer(reducer, initial.app);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarPeek, setSidebarPeek] = useState(false);
   const [sidebarWidth, setSidebarWidthState] = useState<number>(loadSidebarWidth);
-  const [projectRootMap, setProjectRootMap] = useState<Record<string, string | null>>({});
+  const [projectRootMap, setProjectRootMap] = useState<Record<string, string | null>>(
+    initial.cwds
+  );
   const [sidebarView, setSidebarView] = useState<SidebarView>("explorer");
   const [searchNonce, setSearchNonce] = useState(0);
   const [reveal, setReveal] = useState<RevealTarget | null>(null);
-  const [editorMap, editorMapDispatch] = useReducer(editorMapReducer, {});
-  const [focusRegion, setFocusRegion] = useState<FocusRegion>("terminal");
+  const [editorMap, editorMapDispatch] = useReducer(editorMapReducer, initial.editors);
+  const [focusRegion, setFocusRegion] = useState<FocusRegion>(() =>
+    initial.editors[initial.app.activeTabId]?.activePath ? "editor" : "terminal"
+  );
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [gitChangesCount, setGitChangesCount] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -466,6 +556,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const editorDispatch = (action: EditorAction) =>
     editorMapDispatch({ ...action, tabId: activeTabId });
 
+  // Session persistence. Inputs live in a ref so the debounced/unload writers
+  // always see the latest state; editorMap changes on every keystroke, so the
+  // write is debounced rather than immediate, and `pagehide` flushes the tail
+  // on a normal quit. A crash loses at most the last debounce window.
+  const snapshotRef = useRef({
+    tabs: state.tabs,
+    activeTabId,
+    activePaneId,
+    editors: editorMap,
+  });
+  snapshotRef.current = {
+    tabs: state.tabs,
+    activeTabId,
+    activePaneId,
+    editors: editorMap,
+  };
+  /** Last shell cwd seen per tab, written into the snapshot so a restored
+   * tab's terminal starts where the old one left off. */
+  const tabCwds = useRef<Record<string, string>>({ ...initial.cwds });
+  const writeSnapshot = () => {
+    const s = snapshotRef.current;
+    saveSnapshot(s.tabs, s.activeTabId, s.editors, tabCwds.current);
+  };
+
   useEffect(() => {
     if (!(sidebarOpen || sidebarPeek) || !activePaneId) return;
     let cancelled = false;
@@ -491,6 +605,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       for (const k of Object.keys(next)) if (!ids.has(k)) delete next[k];
       return next;
     });
+    for (const k of Object.keys(tabCwds.current)) {
+      if (!ids.has(k)) delete tabCwds.current[k];
+    }
     editorMapDispatch({ type: "prune", ids });
   }, [state.tabs]);
 
@@ -506,8 +623,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    saveSnapshot(state.tabs, state.activeTabId);
-  }, [state.tabs, state.activeTabId]);
+    const timer = setTimeout(() => {
+      const { activeTabId, activePaneId } = snapshotRef.current;
+      resolveCwd(activePaneId)
+        .then((cwd) => {
+          if (cwd) tabCwds.current[activeTabId] = cwd;
+        })
+        .catch(() => { })
+        .finally(writeSnapshot);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [state.tabs, state.activeTabId, editorMap]);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", writeSnapshot);
+    return () => window.removeEventListener("pagehide", writeSnapshot);
+  }, []);
 
   const api = useMemo<StoreApi>(
     () => ({

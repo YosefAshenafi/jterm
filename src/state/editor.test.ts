@@ -6,6 +6,7 @@ import {
   editorReducer,
   emptyEditor,
   isDirty,
+  restoredBuffer,
 } from "./editor";
 
 const open = (s: EditorState, path: string) =>
@@ -104,6 +105,35 @@ describe("rename-path", () => {
   it("returns the same reference when nothing matches", () => {
     const s = open(emptyEditor, "/a.ts");
     expect(editorReducer(s, { type: "rename-path", from: "/b.ts", to: "/c.ts" })).toBe(s);
+  });
+});
+
+describe("session restore", () => {
+  const restored = (draft?: string): EditorState => ({
+    files: [restoredBuffer("/a.ts", "a.ts", draft)],
+    activePath: "/a.ts",
+  });
+
+  it("a restored buffer loads from disk like a fresh open", () => {
+    let s = restored();
+    expect(s.files[0]).toMatchObject({ loading: true, saved: null });
+    s = editorReducer(s, { type: "loaded", path: "/a.ts", text: "disk" });
+    expect(s.files[0]).toMatchObject({ saved: "disk", draft: "disk" });
+    expect(isDirty(s.files[0])).toBe(false);
+  });
+
+  it("a restored dirty draft survives the disk reload and stays dirty", () => {
+    let s = restored("unsaved edits");
+    s = editorReducer(s, { type: "loaded", path: "/a.ts", text: "disk" });
+    expect(s.files[0]).toMatchObject({ saved: "disk", draft: "unsaved edits" });
+    expect(isDirty(s.files[0])).toBe(true);
+    expect(s.files[0].pendingDraft).toBeUndefined();
+  });
+
+  it("a restored draft the disk caught up with opens clean", () => {
+    let s = restored("same");
+    s = editorReducer(s, { type: "loaded", path: "/a.ts", text: "same" });
+    expect(isDirty(s.files[0])).toBe(false);
   });
 });
 

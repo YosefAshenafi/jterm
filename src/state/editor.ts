@@ -13,6 +13,9 @@ export interface FileBuffer {
   /** Set for image files: rendered as a preview (`imageSrc` data URL) not text. */
   image?: boolean;
   imageSrc?: string;
+  /** Unsaved draft carried over from the previous session, re-applied once the
+   * disk read lands (unless the disk already matches it). */
+  pendingDraft?: string;
 }
 
 export interface EditorState {
@@ -22,6 +25,22 @@ export interface EditorState {
 }
 
 export const emptyEditor: EditorState = { files: [], activePath: null };
+
+/** A buffer recreated from a saved session: its content re-reads from disk
+ * when the tab is next shown, and a dirty `draft` from the previous run is
+ * re-applied on top once the read lands. */
+export function restoredBuffer(path: string, name: string, draft?: string): FileBuffer {
+  return {
+    path,
+    name,
+    saved: null,
+    draft: draft ?? "",
+    loading: true,
+    error: null,
+    diff: false,
+    pendingDraft: draft,
+  };
+}
 
 export type EditorAction =
   | { type: "open"; path: string; name: string }
@@ -86,14 +105,23 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
       }
       return { files: [...state.files, file], activePath: action.path };
     }
-    case "loaded":
+    case "loaded": {
+      const prev = state.files.find((f) => f.path === action.path);
+      // A restored dirty draft survives the reload; if the disk caught up with
+      // it (saved elsewhere before the restart) the buffer opens clean.
+      const draft =
+        prev?.pendingDraft != null && prev.pendingDraft !== action.text
+          ? prev.pendingDraft
+          : action.text;
       return patch(state, action.path, {
         saved: action.text,
-        draft: action.text,
+        draft,
         loading: false,
         error: null,
         diff: false,
+        pendingDraft: undefined,
       });
+    }
     case "image-loaded":
       return patch(state, action.path, {
         saved: "",
@@ -103,6 +131,7 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
         diff: false,
         image: true,
         imageSrc: action.src,
+        pendingDraft: undefined,
       });
     case "edit":
       return patch(state, action.path, { draft: action.draft, error: null, diff: false });

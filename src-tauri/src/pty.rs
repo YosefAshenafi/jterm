@@ -70,7 +70,10 @@ impl PtyManager {
 
         let shell = shell.unwrap_or_else(default_shell);
         let mut cmd = CommandBuilder::new(shell);
-        if let Some(cwd) = cwd {
+        // A start directory that vanished since it was recorded (e.g. a
+        // session-restored cwd deleted while the app was closed) would make
+        // the spawn fail; fall back to the default instead.
+        if let Some(cwd) = cwd.filter(|c| std::path::Path::new(c).is_dir()) {
             cmd.cwd(cwd);
         }
         #[cfg(not(target_os = "windows"))]

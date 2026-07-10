@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Session restore**: reopening the app — after a quit, a crash, or a reboot —
+  brings back each tab's open files (re-read from disk when the tab is shown),
+  the file it was showing, unsaved edits, and the terminal's working directory,
+  not just the tab names. Files deleted while the app was closed show an error
+  in their tab, and a vanished working directory falls back to the default.
 - **⌘C / ⌘V in the Explorer**: point at the file tree and press ⌘V
   (`Ctrl+Shift+V` on Windows/Linux) to paste into the selected folder — or a
   selected file's folder, or the project root — and ⌘C to copy the selected
